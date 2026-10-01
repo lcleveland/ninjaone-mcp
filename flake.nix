@@ -14,15 +14,36 @@
       pkgsFor = system: nixpkgs.legacyPackages.${system};
     in
     {
+      overlays.default = import ./overlay.nix;
+
+      nixosModules = {
+        ninjaone-mcp =
+          { pkgs, ... }:
+          {
+            imports = [ ./modules/ninjaone-mcp.nix ];
+            services.ninjaone-mcp.package =
+              lib.mkDefault
+                self.packages.${pkgs.stdenv.hostPlatform.system}.ninjaone-mcp;
+          };
+        default = self.nixosModules.ninjaone-mcp;
+      };
+
       packages = forAllSystems (system: rec {
         ninjaone-mcp = (pkgsFor system).callPackage ./pkgs/ninjaone-mcp.nix { };
         default = ninjaone-mcp;
       });
 
-      checks = forAllSystems (system: {
-        # Runs the Go test suite in checkPhase.
-        package = self.packages.${system}.ninjaone-mcp;
-      });
+      checks = forAllSystems (
+        system:
+        {
+          # Runs the Go test suite in checkPhase.
+          package = self.packages.${system}.ninjaone-mcp;
+        }
+        // import ./tests/eval.nix {
+          inherit self lib;
+          pkgs = pkgsFor system;
+        }
+      );
 
       formatter = forAllSystems (system: (pkgsFor system).nixfmt-tree);
 
