@@ -45,5 +45,8 @@ func run(args []string) error {
 	c := ninjaone.New(cfg.BaseURL, cfg.ClientID, cfg.ClientSecret, cfg.Scopes, &http.Client{Timeout: cfg.RequestTimeout}, log)
 	s, n := server.New(cfg, c, log)
 	log.Info("registered tools", "count", n)
+	if cfg.HTTP {
+		return server.ServeHTTP(ctx, cfg, s, log)
+	}
 	return server.ServeStdio(ctx, s)
 }
