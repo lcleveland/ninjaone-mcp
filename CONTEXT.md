@@ -27,3 +27,19 @@ _Avoid_: client, customer, company
 **Device**:
 A machine managed by NinjaOne.
 _Avoid_: node, endpoint, agent
+
+**Tool group**:
+A named set of tools the operator can enable or disable together (e.g. inventory, patching, ticketing).
+_Avoid_: module, feature, category
+
+**Report**:
+A fleet-wide NinjaOne query (`/v2/queries/*`) returning one row per device or item, filtered by a device filter.
+_Avoid_: query (alone), search
+
+**Device filter**:
+NinjaOne's `df` expression selecting devices by org, location, role, class, status or group; AND only, no OR.
+_Avoid_: search, query
+
+**Board**:
+A saved NinjaOne ticket view; listing tickets means running a board.
+_Avoid_: queue, view
