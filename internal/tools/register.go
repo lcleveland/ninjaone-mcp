@@ -22,7 +22,8 @@ func Register(s *mcp.Server, d Deps) int {
 		d.Log = slog.New(slog.DiscardHandler)
 	}
 	registerStatus(s, d)
-	n := 1
+	must("ninjaone_api", registerGeneric(s, d))
+	n := 2
 	for _, t := range Tools() {
 		if !d.Config.GroupOn(t.Group) || len(d.views(t)) == 0 {
 			continue
