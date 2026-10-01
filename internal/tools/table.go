@@ -67,7 +67,7 @@ const (
 // Tools is the whole first-class tool table, in registration order.
 func Tools() []Tool {
 	var all []Tool
-	for _, t := range [][]Tool{inventoryTools, readTools} {
+	for _, t := range [][]Tool{inventoryTools, deviceWriteTools, readTools} {
 		all = append(all, t...)
 	}
 	return all

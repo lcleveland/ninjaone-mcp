@@ -11,10 +11,10 @@ var readTools = []Tool{
 	// alerts
 	{Name: "ninjaone_alert", Group: "alerts", Title: "Alerts",
 		Description: "Active NinjaOne alerts: conditions currently triggered on devices. Not paged; narrow with df or sourceType.",
-		Views: []View{
+		Views: append([]View{
 			{Action: "list", Help: "active alerts across the fleet; df, query sourceType.", Path: "/v2/alerts", DF: true, Brief: alertBrief},
 			{Action: "device", Help: "active alerts on device id.", Path: "/v2/device/{id}/alerts", Brief: alertBrief},
-		}},
+		}, alertWriteViews...)},
 	{Name: "ninjaone_activity", Group: "alerts", Title: "Activities and jobs",
 		Description: "What happened: the NinjaOne activity log (newest first), and jobs running now. " +
 			"After a device action, list that device's activities with query {\"newerThan\": <activity id>} to see its outcome.",

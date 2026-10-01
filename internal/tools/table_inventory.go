@@ -7,14 +7,14 @@ var deviceBrief = []string{"id", "systemName", "displayName", "dnsName", "nodeCl
 var inventoryTools = []Tool{
 	{Name: "ninjaone_organization", Group: "inventory", Title: "Organizations",
 		Description: "NinjaOne organizations (the customers or sites that own locations and devices).",
-		Views: []View{
+		Views: append([]View{
 			{Action: "list", Help: "all organizations.", Path: "/v2/organizations", Paging: After,
 				Brief: []string{"id", "name", "description", "nodeApprovalMode"}},
 			{Action: "get", Help: "one organization (id) with its locations, policies and settings.", Path: "/v2/organization/{id}", Single: true},
 			{Action: "locations", Help: "the locations of organization id.", Path: "/v2/organization/{id}/locations"},
 			{Action: "devices", Help: "the devices of organization id.", Path: "/v2/organization/{id}/devices", Paging: After, Brief: deviceBrief},
 			{Action: "end_users", Help: "the end users of organization id.", Path: "/v2/organization/{id}/end-users"},
-		}},
+		}, orgAdminViews...)},
 	{Name: "ninjaone_location", Group: "inventory", Title: "Locations",
 		Description: "NinjaOne locations across all organizations. For one organization's locations use ninjaone_organization action locations.",
 		Views: []View{
@@ -23,12 +23,12 @@ var inventoryTools = []Tool{
 		}},
 	{Name: "ninjaone_device", Group: "inventory", Title: "Devices",
 		Description: "Devices managed by NinjaOne. To find one by name, user or IP use search; to select by organization, location, role, class or status use list with df.",
-		Views: []View{
+		Views: append([]View{
 			{Action: "list", Help: "devices matching df (or all). Brief items include lastContact and offline.", Path: "/v2/devices", Paging: After, DF: true, Brief: deviceBrief},
 			{Action: "search", Help: "free-text search by name, logged-on user or IP: query {\"q\": \"...\"}.", Path: "/v2/devices/search",
 				Items: "devices", LimitParam: "limit", Brief: deviceBrief},
 			{Action: "get", Help: "one device (id) in full, plus _dashboard_url linking to it in the NinjaOne console.", Path: "/v2/device/{id}", Single: true, DeepLink: true},
-		}},
+		}, deviceAdminViews...)},
 	{Name: "ninjaone_device_detail", Group: "inventory", Title: "Device details",
 		Description: "Hardware, software and state of one device (id). For the same data across many devices use ninjaone_report.",
 		Views: []View{
