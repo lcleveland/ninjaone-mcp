@@ -31,13 +31,14 @@ type View struct {
 	// Writes. A view with a Capability is a write, or (Method POST, no
 	// Capability) a read that NinjaOne happens to serve over POST.
 	Capability  string
-	Body        bool   // takes the body input
-	Multipart   string // send body as this multipart JSON part instead of JSON
-	ReasonField string // also forward reason into this body field
-	Bulk        bool   // body may be an array, capped at --max-bulk
-	Device      bool   // acts on one live device: list ids rejected
-	Confirm     bool   // confirm must equal the device's display name
-	Dispatch    bool   // async on the agent: report a dispatch, not success
+	Body        bool     // takes the body input
+	Multipart   string   // send body as this multipart JSON part instead of JSON
+	ReasonField string   // also forward reason into this body field
+	Require     []string // body keys that must be present
+	Bulk        bool     // body may be an array, capped at --max-bulk
+	Device      bool     // acts on one live device: list ids rejected
+	Confirm     bool     // confirm must equal the device's display name
+	Dispatch    bool     // async on the agent: report a dispatch, not success
 	Destructive bool
 }
 

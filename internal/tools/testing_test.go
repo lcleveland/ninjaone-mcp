@@ -19,6 +19,8 @@ import (
 
 // session starts a fake NinjaOne (token endpoint + h for /v2/) and an
 // in-memory MCP client/server pair.
+type sessionT = *mcp.ClientSession
+
 func session(t *testing.T, cfg *config.Config, h http.HandlerFunc) *mcp.ClientSession {
 	t.Helper()
 	return sessionLog(t, cfg, nil, h)

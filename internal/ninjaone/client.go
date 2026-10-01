@@ -12,7 +12,9 @@ import (
 	"log/slog"
 	"math/rand/v2"
 	"mime"
+	"mime/multipart"
 	"net/http"
+	"net/textproto"
 	"net/url"
 	"strconv"
 	"strings"
@@ -138,18 +140,22 @@ func (c *Client) bearer(ctx context.Context, force bool) (string, error) {
 	return c.token, nil
 }
 
+// Multipart sends Value as a JSON part named Part of a multipart/form-data
+// body, for the few endpoints (ticket comments) that take one.
+type Multipart struct {
+	Part  string
+	Value any
+}
+
 // Do sends one API request. path starts with /v2/. body is JSON-encoded when
 // non-nil. Non-2xx replies return *APIError.
 //
 // Only GETs are retried: NinjaOne actions take no idempotency key, so a
 // retried POST can reboot a machine or run a script twice.
 func (c *Client) Do(ctx context.Context, method, path string, q url.Values, body any) (*Response, error) {
-	var payload []byte
-	if body != nil {
-		var err error
-		if payload, err = json.Marshal(body); err != nil {
-			return nil, fmt.Errorf("encoding request body: %w", err)
-		}
+	payload, contentType, err := encode(body)
+	if err != nil {
+		return nil, err
 	}
 	u := c.url(path)
 	if len(q) > 0 {
@@ -171,8 +177,8 @@ func (c *Client) Do(ctx context.Context, method, path string, q url.Values, body
 		}
 		req.Header.Set("Authorization", "Bearer "+tok)
 		req.Header.Set("Accept", "application/json")
-		if body != nil {
-			req.Header.Set("Content-Type", "application/json")
+		if contentType != "" {
+			req.Header.Set("Content-Type", contentType)
 		}
 
 		resp, err := c.hc.Do(req)
@@ -221,6 +227,33 @@ func (c *Client) Do(ctx context.Context, method, path string, q url.Values, body
 		}
 		return nil, e
 	}
+}
+
+// url joins the base and an already-escaped path.
+func encode(body any) ([]byte, string, error) {
+	if body == nil {
+		return nil, "", nil
+	}
+	if mp, ok := body.(Multipart); ok {
+		j, err := json.Marshal(mp.Value)
+		if err != nil {
+			return nil, "", fmt.Errorf("encoding request body: %w", err)
+		}
+		var b bytes.Buffer
+		w := multipart.NewWriter(&b)
+		part, _ := w.CreatePart(textproto.MIMEHeader{
+			"Content-Disposition": {`form-data; name="` + mp.Part + `"`},
+			"Content-Type":        {"application/json"},
+		})
+		part.Write(j)
+		w.Close()
+		return b.Bytes(), w.FormDataContentType(), nil
+	}
+	j, err := json.Marshal(body)
+	if err != nil {
+		return nil, "", fmt.Errorf("encoding request body: %w", err)
+	}
+	return j, "application/json", nil
 }
 
 // url joins the base and an already-escaped path.
