@@ -3,6 +3,8 @@ package main
 
 import (
 	"context"
+	"errors"
+	"flag"
 	"fmt"
 	"log/slog"
 	"net/http"
@@ -25,6 +27,9 @@ func main() {
 
 func run(args []string) error {
 	cfg, warnings, err := config.Parse(args, os.Getenv)
+	if errors.Is(err, flag.ErrHelp) {
+		return nil
+	}
 	if err != nil {
 		return err
 	}

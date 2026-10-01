@@ -117,6 +117,11 @@ func Parse(args []string, getenv func(string) string) (*Config, []string, error)
 	fs.StringVar(&hauth, "http-auth-token-file", getenv("NINJAONE_MCP_HTTP_AUTH_TOKEN_FILE"), "file holding the bearer token HTTP clients must send (env NINJAONE_MCP_HTTP_AUTH_TOKEN_FILE)")
 	fs.BoolVar(&c.ShowVersion, "version", false, "print version and exit")
 	if err := fs.Parse(args); err != nil {
+		if errors.Is(err, flag.ErrHelp) {
+			fs.SetOutput(os.Stderr)
+			fmt.Fprintln(os.Stderr, "Usage: ninjaone-mcp --region <region> --client-id <id> --client-secret-file <path> [flags]")
+			fs.PrintDefaults()
+		}
 		return nil, nil, err
 	}
 	if c.ShowVersion {
