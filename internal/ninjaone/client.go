@@ -223,10 +223,9 @@ func (c *Client) Do(ctx context.Context, method, path string, q url.Values, body
 	}
 }
 
+// url joins the base and an already-escaped path.
 func (c *Client) url(path string) string {
-	u := *c.base
-	u.Path = strings.TrimRight(u.Path, "/") + path
-	return u.String()
+	return strings.TrimRight(c.base.String(), "/") + path
 }
 
 // html reports a non-JSON (HTML) body, which on an API path means a throttle

@@ -22,7 +22,15 @@ func Register(s *mcp.Server, d Deps) int {
 		d.Log = slog.New(slog.DiscardHandler)
 	}
 	registerStatus(s, d)
-	return 1
+	n := 1
+	for _, t := range Tools() {
+		if !d.Config.GroupOn(t.Group) || len(d.views(t)) == 0 {
+			continue
+		}
+		must(t.Name, registerTool(s, d, t))
+		n++
+	}
+	return n
 }
 
 // must panics on a schema error: the tool set is static, so only a
