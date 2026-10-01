@@ -1,0 +1,5 @@
+# Capability flags, not verb flags
+
+netbox-mcp gates writes with `--allow-create/update/delete`. NinjaOne writes don't fit that shape: a reboot, a script run and a ticket comment are all POSTs, and every one of NinjaOne's 164 write operations needs the same `management` OAuth scope, so neither HTTP verbs nor scopes separate a harmless write from code execution as SYSTEM. We gate writes by **capability** instead: seven opt-in flags (`tickets`, `documentation`, `custom-fields`, `device-maintenance`, `device-actions`, `scripts`, `device-admin`), all off by default, with tenant-admin endpoints (policies, custom-field definitions, users/roles, webhook, installer generation, billing) never exposed. The generic `/v2/` tool obeys the same flags through a method+path route table and rejects any write route it doesn't know.
+
+See [Capability flags and write safety](https://github.com/lcleveland/ninjaone-mcp/issues/7) and the [write-endpoint research](https://github.com/lcleveland/ninjaone-mcp/blob/research/ninjaone-write-endpoints/docs/research/ninjaone-write-endpoints.md).

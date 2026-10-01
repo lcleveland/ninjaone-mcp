@@ -43,3 +43,7 @@ _Avoid_: search, query
 **Board**:
 A saved NinjaOne ticket view; listing tickets means running a board.
 _Avoid_: queue, view
+
+**Dispatch**:
+An action NinjaOne has accepted and queued to a device's agent but not yet confirmed as done; its outcome shows up later as activities.
+_Avoid_: job, run, success
