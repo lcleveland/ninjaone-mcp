@@ -104,6 +104,9 @@ There is no flag that takes the secret directly.
             enable = true;
             region = "us2";
             clientId = "<client id>";
+            # or, to keep the ID out of the Nix config:
+            #   printf %s '<client id>' | sudo install -m 0400 /dev/stdin /persist/secrets/ninjaone-client-id
+            # clientIdFile = "/persist/secrets/ninjaone-client-id";
             # sops-nix / agenix path, or a root-only file:
             #   printf %s '<secret>' | sudo install -m 0400 /dev/stdin /persist/secrets/ninjaone-client-secret
             clientSecretFile = "/persist/secrets/ninjaone-client-secret";
