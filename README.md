@@ -158,14 +158,17 @@ claude mcp add ninjaone -e NINJAONE_REGION=us2 -e NINJAONE_CLIENT_ID=<id> \
   -e NINJAONE_CLIENT_SECRET_FILE=$HOME/.config/ninjaone-mcp/client-secret -- ninjaone-mcp
 ```
 
-## Not yet verified against a live tenant
+## Checked against us2 (2026-10-02)
 
-The suite runs against fakes. These behaviours come from NinjaOne's docs and community clients, and still need checking on us2:
-- whether `df` accepts `+` for spaces (the client always sends `%20`);
-- how throttling actually looks. The client treats a 429 or an HTML page as throttling and retries GETs only;
-- what `script/run` returns. The server never relies on it;
-- whether technician roles limit a client-credentials API client, or whether it sees the whole tenant;
-- whether ticket writes and script runs return `403 user_context_required` for an API client. If they do, the error says so.
+- `df` with `%20` for spaces works. `+` is still untested, but the client never sends it.
+- The last page of an `after`-paged list is an empty `results` array.
+- `/v2/queries/*` page by `cursor` (`{name, count, expires, offset}`). `ts` takes `after <date>` or `before <date>`. Anything else returns `500 InvalidFilterException`.
+- The syntax of `of` on `/v2/organizations` is still unknown: `name = …`, `id = 1`, `org = 1` and `org in (1)` all return `500 InvalidFilterException`.
+- A client-credentials API client with `monitoring` and `management` scopes can read everything checked, and sees organization 1 and about 480 devices.
+- No throttling seen: 100, then 500 concurrent `GET /v2/organizations` all succeeded, the 500 in 0.85 s with none slower than 0.75 s, so nothing was retried. The real limit is higher, or applies elsewhere.
+- `script/run` returns `403 user_context_required` for an API client, so the `scripts` capability cannot run scripts unless NinjaOne grants user context.
+
+Still unverified: what a throttled response looks like (the client treats a 429 or an HTML page as throttling and retries GETs only), whether technician roles limit an API client, and ticket writes (this tenant does not use NinjaOne ticketing).
 
 ## Development
 
