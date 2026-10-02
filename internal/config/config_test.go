@@ -90,6 +90,22 @@ func TestRegionAndBaseURL(t *testing.T) {
 	if _, _, err := Parse([]string{"--region", "us2", "--client-secret-file", sec}, env(nil)); err == nil {
 		t.Error("missing client id: want error")
 	}
+	idDir := filepath.Dir(secretFile(t, "client-id", "from-cred"))
+	for _, tc := range []struct {
+		args []string
+		env  map[string]string
+		want string
+	}{
+		{[]string{"--client-id-file", secretFile(t, "id", "from-file")}, map[string]string{"NINJAONE_CLIENT_ID": "x"}, "from-file"},
+		{nil, map[string]string{"NINJAONE_CLIENT_ID_FILE": secretFile(t, "id2", "from-env-file"), "CREDENTIALS_DIRECTORY": idDir}, "from-env-file"},
+		{[]string{"--client-id", "flag"}, map[string]string{"CREDENTIALS_DIRECTORY": idDir}, "flag"},
+		{nil, map[string]string{"CREDENTIALS_DIRECTORY": idDir}, "from-cred"},
+	} {
+		c, _, err := Parse(append([]string{"--region", "us2", "--client-secret-file", sec}, tc.args...), env(tc.env))
+		if err != nil || c.ClientID != tc.want {
+			t.Errorf("%v %v: id = %v, %v; want %q", tc.args, tc.env, c, err, tc.want)
+		}
+	}
 }
 
 func TestCapabilitiesAndGroups(t *testing.T) {

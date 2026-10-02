@@ -89,6 +89,7 @@ func Parse(args []string, getenv func(string) string) (*Config, []string, error)
 	var (
 		c                                 Config
 		region, rawURL, secretFile, hauth string
+		idFile                            string
 		groups, logLevel                  string
 		stdio                             bool
 		warnings                          []string
@@ -101,6 +102,7 @@ func Parse(args []string, getenv func(string) string) (*Config, []string, error)
 	fs.StringVar(&region, "region", getenv("NINJAONE_REGION"), "NinjaOne region: app|us|us2|eu|ca|oc|fed (env NINJAONE_REGION)")
 	fs.StringVar(&rawURL, "base-url", getenv("NINJAONE_BASE_URL"), "NinjaOne base URL, instead of --region (env NINJAONE_BASE_URL)")
 	fs.StringVar(&c.ClientID, "client-id", getenv("NINJAONE_CLIENT_ID"), "API Services client ID (env NINJAONE_CLIENT_ID)")
+	fs.StringVar(&idFile, "client-id-file", getenv("NINJAONE_CLIENT_ID_FILE"), "file holding the client ID, instead of --client-id (env NINJAONE_CLIENT_ID_FILE)")
 	fs.StringVar(&secretFile, "client-secret-file", getenv("NINJAONE_CLIENT_SECRET_FILE"), "file holding the client secret (env NINJAONE_CLIENT_SECRET_FILE)")
 	fs.StringVar(&c.Scopes, "scopes", "", "space-separated OAuth scopes to request (default: all scopes on the app)")
 	fs.DurationVar(&c.RequestTimeout, "request-timeout", 30*time.Second, "per-request timeout to NinjaOne")
@@ -147,10 +149,20 @@ func Parse(args []string, getenv func(string) string) (*Config, []string, error)
 	}
 	c.BaseURL, c.Region = u, region
 
-	if c.ClientID == "" {
-		return nil, nil, errors.New("--client-id (or NINJAONE_CLIENT_ID) is required")
-	}
 	credDir := getenv("CREDENTIALS_DIRECTORY")
+	switch {
+	case idFile != "":
+		c.ClientID, err = readSecret(idFile)
+	case c.ClientID != "":
+	case credDir != "":
+		c.ClientID, _ = readSecret(filepath.Join(credDir, "client-id"))
+	}
+	if err != nil {
+		return nil, nil, err
+	}
+	if c.ClientID == "" {
+		return nil, nil, errors.New("no client ID: set --client-id, --client-id-file, NINJAONE_CLIENT_ID, NINJAONE_CLIENT_ID_FILE or the systemd credential client-id")
+	}
 	switch {
 	case secretFile != "":
 		c.ClientSecret, err = readSecret(secretFile)

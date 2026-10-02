@@ -57,8 +57,6 @@ let
     )
     "--path"
     cfg.path
-    "--client-id"
-    cfg.clientId
     "--tool-groups"
     (lib.concatStringsSep "," cfg.toolGroups)
     "--max-bulk"
@@ -80,6 +78,10 @@ let
         cfg.region
       ]
   )
+  ++ lib.optionals (cfg.clientId != null) [
+    "--client-id"
+    cfg.clientId
+  ]
   ++ lib.optionals (cfg.scopes != [ ]) [
     "--scopes"
     (lib.concatStringsSep " " cfg.scopes)
@@ -122,8 +124,15 @@ in
     };
 
     clientId = mkOption {
-      type = types.str;
-      description = "Client ID of the NinjaOne API Services (machine-to-machine) application. Not secret.";
+      type = types.nullOr types.str;
+      default = null;
+      description = "Client ID of the NinjaOne API Services (machine-to-machine) application. Not secret. Set exactly one of clientId and clientIdFile.";
+    };
+    clientIdFile = mkOption {
+      type = types.nullOr types.str;
+      default = null;
+      example = "/persist/secrets/ninjaone-client-id";
+      description = "Runtime path to a file holding the client ID, instead of clientId. Passed via systemd `LoadCredential`.";
     };
     clientSecretFile = mkOption {
       type = types.nullOr types.str;
@@ -256,6 +265,14 @@ in
           message = "services.ninjaone-mcp: set exactly one of region and baseUrl.";
         }
         {
+          assertion = (cfg.clientId == null) != (cfg.clientIdFile == null);
+          message = "services.ninjaone-mcp: set exactly one of clientId and clientIdFile.";
+        }
+        {
+          assertion = cfg.clientIdFile == null || lib.hasPrefix "/" cfg.clientIdFile;
+          message = "services.ninjaone-mcp.clientIdFile must be an absolute path.";
+        }
+        {
           assertion = cfg.clientSecretFile != null && lib.hasPrefix "/" cfg.clientSecretFile;
           message = "services.ninjaone-mcp.clientSecretFile must be an absolute runtime path to the API client secret.";
         }
@@ -311,6 +328,7 @@ in
           LoadCredential = [
             "client-secret:${cfg.clientSecretFile}"
           ]
+          ++ optional (cfg.clientIdFile != null) "client-id:${cfg.clientIdFile}"
           ++ optional (cfg.bearerTokenFile != null) "http-auth-token:${cfg.bearerTokenFile}";
 
           User = mkIf staticUser cfg.user;

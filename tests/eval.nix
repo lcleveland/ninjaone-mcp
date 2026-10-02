@@ -99,6 +99,8 @@ in
       {
         region = null;
         baseUrl = "https://us2.ninjarmm.com";
+        clientId = null;
+        clientIdFile = "/run/secrets/client-id";
         allowTickets = true;
         allowCustomFields = true;
         allowDeviceActions = true;
@@ -113,6 +115,8 @@ in
       }
       ''
         check "--base-url https://us2.ninjarmm.com" cmd
+        refute "--client-id" cmd
+        check "client-id:/run/secrets/client-id" creds
         refute "--region" cmd
         check "--allow-tickets" cmd
         check "--allow-custom-fields" cmd
@@ -139,5 +143,8 @@ in
   module-region-and-url = mustFail "region-and-url" {
     baseUrl = "https://x.ninjarmm.com";
   } "exactly one of region and baseUrl";
+  module-two-ids = mustFail "two-ids" {
+    clientIdFile = "/run/secrets/client-id";
+  } "exactly one of clientId and clientIdFile";
   module-no-region = mustFail "no-region" { region = null; } "exactly one of region and baseUrl";
 }

@@ -162,6 +162,12 @@ pkgs.testers.runNixOSTest {
           mode = "0400";
           argument = clientSecret;
         };
+        "/run/ninjaone-client-id".f = {
+          user = "root";
+          group = "root";
+          mode = "0400";
+          argument = clientId;
+        };
         "/run/ninjaone-mcp-bearer".f = {
           user = "root";
           group = "root";
@@ -173,7 +179,7 @@ pkgs.testers.runNixOSTest {
       services.ninjaone-mcp = {
         enable = true;
         baseUrl = "http://127.0.0.1:${toString stubPort}";
-        inherit clientId;
+        clientIdFile = "/run/ninjaone-client-id";
         clientSecretFile = "/run/ninjaone-client-secret";
         bearerTokenFile = "/run/ninjaone-mcp-bearer";
         port = mcpPort;

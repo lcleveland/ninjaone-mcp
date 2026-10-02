@@ -55,7 +55,8 @@ Why capabilities rather than create/update/delete flags: every NinjaOne write ne
 |---|---|---|
 | `--region` (`app`, `us`, `us2`, `eu`, `ca`, `oc`, `fed`) | `NINJAONE_REGION` | one of region/base URL required |
 | `--base-url` | `NINJAONE_BASE_URL` | https only, except to loopback |
-| `--client-id` | `NINJAONE_CLIENT_ID` | required |
+| `--client-id` | `NINJAONE_CLIENT_ID` | required, or a file below |
+| `--client-id-file` | `NINJAONE_CLIENT_ID_FILE` | the systemd credential `client-id`; wins over `--client-id` |
 | `--client-secret-file` | `NINJAONE_CLIENT_SECRET_FILE` | see below |
 | `--scopes` | | all scopes on the app |
 | `--allow-<capability>` | | all off |
@@ -125,7 +126,8 @@ The module:
 |---|---|---|
 | `enable`, `package` | off, this flake's build | |
 | `region` / `baseUrl` | | exactly one |
-| `clientId`, `clientSecretFile` | | the secret file is a runtime path string, never a Nix path |
+| `clientId` / `clientIdFile` | | exactly one |
+| `clientSecretFile` | | the secret file is a runtime path string, never a Nix path |
 | `scopes` | `[ ]` (all on the app) | `monitoring`, `management`, `control` |
 | `allowTickets`, `allowDocumentation`, `allowCustomFields`, `allowDeviceMaintenance`, `allowDeviceActions`, `allowScripts`, `allowDeviceAdmin` | `false` | one per capability |
 | `maxBulk`, `toolGroups` | 50, all | |
