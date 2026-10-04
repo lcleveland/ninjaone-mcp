@@ -21,7 +21,7 @@ buildGoModule (finalAttrs: {
     ];
   };
 
-  vendorHash = "sha256-NbuvbsmNbz3aKdjyyfpkbi52yRhXl473j3LvAUDn3L8=";
+  vendorHash = "sha256-u6gYQO9elwgy2MPPYpRpcOPAWvgYb9YeXmIauIxv4vw=";
 
   subPackages = [ "cmd/ninjaone-mcp" ];
   env.CGO_ENABLED = 0;
