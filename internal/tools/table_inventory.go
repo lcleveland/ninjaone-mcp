@@ -10,6 +10,7 @@ var inventoryTools = []Tool{
 		Views: append([]View{
 			{Action: "list", Help: "all organizations.", Path: "/v2/organizations", Paging: After,
 				Brief: []string{"id", "name", "description", "nodeApprovalMode"}},
+			{Action: "list_detailed", Help: "all organizations in full, each with its locations, policies and settings.", Path: "/v2/organizations-detailed", Paging: After},
 			{Action: "get", Help: "one organization (id) with its locations, policies and settings.", Path: "/v2/organization/{id}", Single: true},
 			{Action: "locations", Help: "the locations of organization id.", Path: "/v2/organization/{id}/locations"},
 			{Action: "devices", Help: "the devices of organization id.", Path: "/v2/organization/{id}/devices", Paging: After, Brief: deviceBrief},
@@ -25,6 +26,8 @@ var inventoryTools = []Tool{
 		Description: "Devices managed by NinjaOne. To find one by name, user or IP use search; to select by organization, location, role, class or status use list with df.",
 		Views: append([]View{
 			{Action: "list", Help: "devices matching df (or all). Brief items include lastContact and offline.", Path: "/v2/devices", Paging: After, DF: true, Brief: deviceBrief},
+			{Action: "list_detailed", Help: "devices matching df in full: OS, system (make, model, serial), processors, volumes, IPs, last logged-on user. Large items: pass fields or a narrow df.",
+				Path: "/v2/devices-detailed", Paging: After, DF: true},
 			{Action: "search", Help: "free-text search by name, logged-on user or IP: query {\"q\": \"...\"}.", Path: "/v2/devices/search",
 				Items: "devices", LimitParam: "limit", Brief: deviceBrief},
 			{Action: "get", Help: "one device (id) in full, plus _dashboard_url linking to it in the NinjaOne console.", Path: "/v2/device/{id}", Single: true, DeepLink: true},
@@ -41,6 +44,8 @@ var inventoryTools = []Tool{
 			{Action: "windows_services", Help: "Windows services and their state; query {\"name\": ..., \"state\": ...}.", Path: "/v2/device/{id}/windows-services"},
 			{Action: "last_logged_on_user", Help: "the last user to log on.", Path: "/v2/device/{id}/last-logged-on-user", Single: true},
 			{Action: "policy_overrides", Help: "policy settings overridden on this device.", Path: "/v2/device/{id}/policy/overrides", Single: true},
+			{Action: "geolocation_history", Help: "where the device has been (latitude, longitude, timestamp); query after/before. NinjaOne needs limit 10 or more.",
+				Path: "/v2/device/{id}/geolocation/history", Paging: Cursor, Items: "results"},
 			{Action: "jobs", Help: "jobs currently running on the device.", Path: "/v2/device/{id}/jobs",
 				Brief: []string{"uid", "jobType", "jobStatus", "jobResult", "subject", "message", "createTime", "updateTime"}},
 		}},

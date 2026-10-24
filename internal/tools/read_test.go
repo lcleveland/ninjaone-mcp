@@ -224,3 +224,25 @@ func TestPageInfoPaging(t *testing.T) {
 		t.Errorf("second page: %v %v", q, out)
 	}
 }
+
+func TestDetailedListsAndGeolocation(t *testing.T) {
+	var q []string
+	cs := session(t, nil, func(w http.ResponseWriter, r *http.Request) {
+		q = append(q, r.URL.Path+"?"+r.URL.RawQuery)
+		if strings.Contains(r.URL.Path, "geolocation") {
+			jsonOK(w, `{"cursor":{"name":"g2"},"results":[{"latitude":44.5,"longitude":-88,"timestamp":1790870000}]}`)
+			return
+		}
+		jsonOK(w, `[{"id":8,"system":{"serialNumber":"PF4RB0YK"}}]`)
+	})
+	out, isErr, text := call(t, cs, "ninjaone_device", map[string]any{"action": "list_detailed", "df": "org = 1", "limit": 1})
+	if isErr || out["results"].([]any)[0].(map[string]any)["system"] == nil || out["next_cursor"] == nil {
+		t.Fatalf("devices: %s %v", text, out)
+	}
+	call(t, cs, "ninjaone_organization", map[string]any{"action": "list_detailed"})
+	out, _, _ = call(t, cs, "ninjaone_device_detail", map[string]any{"action": "geolocation_history", "id": 8, "limit": 10})
+	want := []string{"/v2/devices-detailed?df=org%20%3D%201&pageSize=1", "/v2/organizations-detailed?pageSize=50", "/v2/device/8/geolocation/history?pageSize=10"}
+	if !slices.Equal(q, want) || out["results"].([]any)[0].(map[string]any)["timestamp"] != "2026-10-01T15:53:20Z" {
+		t.Errorf("queries %v, geolocation %v", q, out)
+	}
+}
