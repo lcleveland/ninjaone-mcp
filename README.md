@@ -9,7 +9,7 @@ The server is read-only by default. Writes are turned on per **capability** (tic
 | Group | Tools |
 |---|---|
 | core (always on) | `ninjaone_status` (auth, scopes and reachability probe), `ninjaone_api` (any `/v2/` path, capability-gated) |
-| inventory | `ninjaone_organization`, `ninjaone_location`, `ninjaone_device` (list, search, get with console link), `ninjaone_device_detail` (disks, volumes, software, services, ...), `ninjaone_report` (fleet-wide `/v2/queries/*`), `ninjaone_lookup` (policies, device roles, groups), `ninjaone_user`, `ninjaone_script` (automation library, scheduled tasks, per-device options; run with `--allow-scripts`), and with a capability enabled `ninjaone_device_action` |
+| inventory | `ninjaone_organization`, `ninjaone_location`, `ninjaone_device` (list, search, get with console link), `ninjaone_device_detail` (disks, volumes, software, services, ...), `ninjaone_report` (fleet-wide `/v2/queries/*`), `ninjaone_lookup` (policies, device roles, groups), `ninjaone_tag` (asset tags; set, merge, delete with `--allow-documentation`), `ninjaone_user`, `ninjaone_script` (automation library, scheduled tasks, per-device options; run with `--allow-scripts`), and with a capability enabled `ninjaone_device_action` |
 | alerts | `ninjaone_alert`, `ninjaone_activity` (activity log and running jobs) |
 | patching | `ninjaone_patch` (OS and software; pending and installs; per device or fleet) |
 | docs | `ninjaone_custom_field`, `ninjaone_document`, `ninjaone_kb_article` |

@@ -71,6 +71,18 @@ var inventoryTools = []Tool{
 			{Action: "groups", Help: "saved device groups (searches).", Path: "/v2/groups"},
 			{Action: "group_device_ids", Help: "device ids in group id.", Path: "/v2/group/{id}/device-ids"},
 		}},
+	{Name: "ninjaone_tag", Group: "inventory", Title: "Asset tags",
+		Description: "Asset tags: labels on devices (site, room, role). A device's tags are in ninjaone_device get.",
+		Views: []View{
+			{Action: "list", Help: "all asset tags (id, name, description).", Path: "/v2/tag", Items: "tags",
+				Brief: []string{"id", "name", "description"}},
+			{Action: "set_device", Help: "set the tags of device id to exactly body {tagIds: [...]}; tags not listed are removed.", Method: "PUT",
+				Path: "/v2/tag/device/{id}", Capability: "documentation", Body: true, Require: []string{"tagIds"}},
+			{Action: "merge", Help: "merge tags; body {tagIds, mergeMethod: MERGE_INTO_EXISTING_TAG (mergeIntoTagId) | MERGE_INTO_NEW_TAG (name, description)}. The merged tags are gone.", Method: "POST",
+				Path: "/v2/tag/merge", Capability: "documentation", Body: true, Require: []string{"tagIds", "mergeMethod"}, Destructive: true},
+			{Action: "delete", Help: "delete tag id, removing it from every asset.", Method: "DELETE",
+				Path: "/v2/tag/{id}", Capability: "documentation", Destructive: true},
+		}},
 	{Name: "ninjaone_user", Group: "inventory", Title: "Users and contacts",
 		Description: "NinjaOne technicians, end users, their roles, and contacts.",
 		Views: []View{

@@ -148,3 +148,27 @@ func TestNeverExposedWritesAbsent(t *testing.T) {
 		t.Errorf("actions = %v", a)
 	}
 }
+
+func TestTagActions(t *testing.T) {
+	var got []string
+	cs := session(t, allow("documentation"), func(w http.ResponseWriter, r *http.Request) {
+		b, _ := io.ReadAll(r.Body)
+		got = append(got, r.Method+" "+r.URL.Path+" "+string(b))
+		jsonOK(w, `{"tags":[{"id":4,"name":"Kiosk","targetsCount":3,"createdBy":{"id":1}}]}`)
+	})
+	out, isErr, text := call(t, cs, "ninjaone_tag", map[string]any{"action": "list"})
+	if item := out["results"].([]any)[0].(map[string]any); isErr || item["name"] != "Kiosk" || item["createdBy"] != nil {
+		t.Fatalf("list: %s %v", text, out)
+	}
+	call(t, cs, "ninjaone_tag", map[string]any{"action": "set_device", "id": 8, "body": map[string]any{"tagIds": []int{4}}, "reason": "r"})
+	call(t, cs, "ninjaone_tag", map[string]any{"action": "delete", "id": 4, "reason": "r"})
+	if got[1] != `PUT /v2/tag/device/8 {"tagIds":[4]}` || got[2] != "DELETE /v2/tag/4 " {
+		t.Errorf("writes: %q", got)
+	}
+	if _, isErr, text = call(t, cs, "ninjaone_tag", map[string]any{"action": "merge", "body": map[string]any{"tagIds": []int{1, 2}}, "reason": "r"}); !isErr || !strings.Contains(text, "mergeMethod") {
+		t.Errorf("merge without mergeMethod: %s", text)
+	}
+	if a := actionsOf(t, session(t, nil, nil), "ninjaone_tag"); !slices.Equal(a, []string{"list"}) {
+		t.Errorf("read-only tag tool: %v", a)
+	}
+}
