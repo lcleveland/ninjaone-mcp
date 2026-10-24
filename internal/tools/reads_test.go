@@ -93,3 +93,21 @@ func TestAllGroupsRegisterReadOnly(t *testing.T) {
 		}
 	}
 }
+
+func TestScriptLibraryAndTasks(t *testing.T) {
+	var paths []string
+	cs := session(t, nil, func(w http.ResponseWriter, r *http.Request) {
+		paths = append(paths, r.URL.Path+"?"+r.URL.RawQuery)
+		jsonOK(w, `[{"id":1,"name":"Reboot","language":"native","scriptParameters":[]}]`)
+	})
+	out, isErr, text := call(t, cs, "ninjaone_script", map[string]any{"action": "library", "query": map[string]any{"lang": "powershell"}})
+	if isErr || paths[0] != "/v2/automation/scripts?lang=powershell" {
+		t.Fatalf("library: %s %v", text, paths)
+	}
+	if item := out["results"].([]any)[0].(map[string]any); item["scriptParameters"] != nil || item["name"] != "Reboot" {
+		t.Errorf("brief: %v", item)
+	}
+	if _, isErr, text = call(t, cs, "ninjaone_script", map[string]any{"action": "scheduled_tasks"}); isErr || paths[1] != "/v2/tasks?" {
+		t.Errorf("tasks: %s %v", text, paths)
+	}
+}

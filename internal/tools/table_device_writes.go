@@ -34,8 +34,11 @@ var deviceWriteTools = []Tool{
 				Path: "/v2/backup/bandwidth-throttle", Capability: "device-actions", Body: true, Require: []string{"deviceId"}},
 		}},
 	{Name: "ninjaone_script", Group: "inventory", Title: "Scripts",
-		Description: "Run a NinjaOne library script or built-in action on one device. This executes code on the machine, often as SYSTEM: confirm with the user first.",
+		Description: "The NinjaOne automation library and scheduled tasks, and running a library script or built-in action on one device. Running executes code on the machine, often as SYSTEM: confirm with the user first.",
 		Views: []View{
+			{Action: "library", Help: "every automation script in the library (id, name, language, OS); query lang. Not paged: narrow with lang or fields.", Path: "/v2/automation/scripts",
+				Brief: []string{"id", "name", "description", "language", "operatingSystems", "active"}},
+			{Action: "scheduled_tasks", Help: "scheduled automation tasks (id, name, description, enabled, lastRun).", Path: "/v2/tasks"},
 			{Action: "options", Help: "scripts, built-in actions and credentials available to run on device id.", Path: "/v2/device/{id}/scripting/options", Single: true},
 			{Action: "run", Help: "run on device id; body {type: SCRIPT|ACTION, id (script) or uid (action), parameters, runAs}. confirm must be the device's display name.", Method: "POST",
 				Path: "/v2/device/{id}/script/run", Capability: "scripts", Body: true, Require: []string{"type"}, Dispatch: true, Confirm: true, Destructive: true},

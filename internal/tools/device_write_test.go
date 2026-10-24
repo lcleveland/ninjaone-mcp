@@ -81,7 +81,7 @@ func TestEachCapabilityGatesOnlyItsOwn(t *testing.T) {
 	}
 
 	cs = session(t, nil, nil)
-	if a := actionsOf(t, cs, "ninjaone_script"); !slices.Equal(a, []string{"options"}) {
+	if a := actionsOf(t, cs, "ninjaone_script"); !slices.Equal(a, []string{"library", "scheduled_tasks", "options"}) {
 		t.Errorf("read-only script tool: %v", a)
 	}
 	if toolNames(t, cs)["ninjaone_device_action"] != nil {
