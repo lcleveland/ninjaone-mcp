@@ -51,7 +51,7 @@ var readTools = []Tool{
 			{Action: "end_user", Help: "values on end user id.", Path: "/v2/user/end-user/{id}/custom-fields", Single: true},
 			{Action: "global", Help: "global (system-wide) values.", Path: "/v2/system/custom-fields", Single: true},
 			{Action: "fleet", Help: "values across devices matching df; query fields (comma list of field names), updatedAfter.", Path: "/v2/queries/custom-fields", Paging: Cursor, Items: "results", DF: true},
-			{Action: "fleet_scoped", Help: "values across organizations/locations/devices; query scopes, fields, updatedAfter.", Path: "/v2/queries/scoped-custom-fields", Paging: Cursor, Items: "results", DF: true},
+			{Action: "fleet_scoped", Help: "values across organizations/locations/devices; query scopes, fields, updatedAfter.", Path: "/v2/queries/scoped-custom-fields", Paging: Cursor, Items: "results"},
 			{Action: "definitions", Help: "field definitions (name, label, type, scope, permissions); query scopes.", Path: "/v2/device-custom-fields",
 				Brief: []string{"name", "label", "type", "definitionScope", "description", "apiPermission"}},
 			{Action: "set_device", Help: "set values on device id; body {fieldName: value, ...}. Dates are epoch milliseconds; dropdowns take option ids.", Method: "PATCH",
