@@ -62,6 +62,7 @@ const (
 	Activity        // pageSize + olderThan=<lastActivityId>; {activities, lastActivityId}
 	Board           // POST {pageSize, lastCursorId}; {data, metadata.lastCursorId}
 	Anchor          // pageSize + anchorId=<last id>; bare array
+	PageInfo        // pageSize + after=<pageInfo.nextCursor>; {pageInfo, results}
 )
 
 // Tools is the whole first-class tool table, in registration order.

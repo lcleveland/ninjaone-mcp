@@ -207,3 +207,20 @@ func TestTableWellFormed(t *testing.T) {
 		}
 	}
 }
+
+func TestPageInfoPaging(t *testing.T) {
+	var q []string
+	cs := session(t, nil, func(w http.ResponseWriter, r *http.Request) {
+		q = append(q, r.URL.Path+"?"+r.URL.RawQuery)
+		more := r.URL.Query().Get("after") == ""
+		jsonOK(w, fmt.Sprintf(`{"pageInfo":{"hasMore":%v,"nextCursor":"Y3Vy"},"results":[{"id":1,"name":"SnagIt"},{"id":2,"name":"FLM"}]}`, more))
+	})
+	out, isErr, text := call(t, cs, "ninjaone_software_license", map[string]any{"action": "list", "limit": 2})
+	if isErr || out["next_cursor"] == nil {
+		t.Fatalf("first page: %s %v", text, out)
+	}
+	out, _, _ = call(t, cs, "ninjaone_software_license", map[string]any{"action": "list", "limit": 2, "cursor": out["next_cursor"]})
+	if q[1] != "/v2/software-license/licenses?after=Y3Vy&pageSize=2" || out["next_cursor"] != nil {
+		t.Errorf("second page: %v %v", q, out)
+	}
+}

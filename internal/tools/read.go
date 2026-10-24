@@ -117,7 +117,7 @@ func (d Deps) list(ctx context.Context, key string, v View, path string, q url.V
 
 	var body any
 	switch v.Paging {
-	case After:
+	case After, PageInfo:
 		q.Set("pageSize", strconv.Itoa(limit))
 		if pos != "" {
 			q.Set("after", pos)
@@ -240,6 +240,10 @@ func page(v View, raw any) ([]any, string) {
 		}
 	case Activity:
 		return items, scalarString(m["lastActivityId"])
+	case PageInfo:
+		if pi, ok := m["pageInfo"].(map[string]any); ok && pi["hasMore"] == true {
+			return items, scalarString(pi["nextCursor"])
+		}
 	case Board:
 		if md, ok := m["metadata"].(map[string]any); ok {
 			return items, scalarString(md["lastCursorId"])
