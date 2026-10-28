@@ -147,4 +147,44 @@ in
     clientIdFile = "/run/secrets/client-id";
   } "exactly one of clientId and clientIdFile";
   module-no-region = mustFail "no-region" { region = null; } "exactly one of region and baseUrl";
+
+  module-user-context =
+    let
+      web = {
+        webClientIdFile = "/persist/secrets/ninjaone-web-client-id";
+        webClientSecretFile = "/persist/secrets/ninjaone-web-client-secret";
+        oauthRedirectUrl = "http://localhost:8233/oauth/callback";
+      };
+      on = evalModule (base web);
+      off = evalModule (base { });
+      sc = on.systemd.services.ninjaone-mcp.serviceConfig;
+    in
+    assert
+      sc.StateDirectory == "ninjaone-mcp"
+      || throw "user-context: StateDirectory = ${toString sc.StateDirectory}";
+    assert sc.StateDirectoryMode == "0700" || throw "user-context: StateDirectoryMode";
+    assert
+      on.services.ninjaone-mcp.persistedPaths == [ "/var/lib/private/ninjaone-mcp" ]
+      || throw "user-context: persistedPaths = ${toString on.services.ninjaone-mcp.persistedPaths}";
+    assert
+      off.services.ninjaone-mcp.persistedPaths == [ ]
+      || throw "user-context off: persistedPaths not empty";
+    assert
+      !(off.systemd.services.ninjaone-mcp.serviceConfig ? StateDirectory)
+      || off.systemd.services.ninjaone-mcp.serviceConfig.StateDirectory == null
+      || throw "user-context off: StateDirectory set";
+    unitCheck "user-context" web ''
+      check "web-client-id:/persist/secrets/ninjaone-web-client-id" creds
+      check "web-client-secret:/persist/secrets/ninjaone-web-client-secret" creds
+      check "--oauth-redirect-url http://localhost:8233/oauth/callback" cmd
+      refute "ninjaone-web-client-secret" cmd
+      refute "ninjaone-web-client-secret" env
+    '';
+  module-one-web-file = mustFail "one-web-file" {
+    webClientIdFile = "/persist/secrets/ninjaone-web-client-id";
+  } "set both webClientIdFile and webClientSecretFile";
+  module-web-secret-in-store = mustFail "web-secret-in-store" {
+    webClientIdFile = "/persist/secrets/ninjaone-web-client-id";
+    webClientSecretFile = "${builtins.storeDir}/abc-web-secret";
+  } "world-readable";
 }

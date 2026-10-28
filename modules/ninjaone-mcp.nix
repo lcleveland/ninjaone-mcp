@@ -45,6 +45,8 @@ let
   isLoopback = a: a == "::1" || a == "localhost" || lib.hasPrefix "127." a;
   inStore = p: p != null && lib.hasPrefix builtins.storeDir p;
   staticUser = cfg.user != null;
+  userContext = cfg.webClientIdFile != null || cfg.webClientSecretFile != null;
+  stateDir = if staticUser then "/var/lib/ninjaone-mcp" else "/var/lib/private/ninjaone-mcp";
 
   args = [
     "--http"
@@ -81,6 +83,10 @@ let
   ++ lib.optionals (cfg.clientId != null) [
     "--client-id"
     cfg.clientId
+  ]
+  ++ lib.optionals (cfg.oauthRedirectUrl != null) [
+    "--oauth-redirect-url"
+    cfg.oauthRedirectUrl
   ]
   ++ lib.optionals (cfg.scopes != [ ]) [
     "--scopes"
@@ -142,6 +148,46 @@ in
         Runtime path to a file holding the API Services client secret. Passed via
         systemd `LoadCredential`, so it never enters the Nix store, argv or the
         environment. Use sops-nix, agenix or a root-owned 0400 file.
+      '';
+    };
+
+    webClientIdFile = mkOption {
+      type = types.nullOr types.str;
+      default = null;
+      example = "/persist/secrets/ninjaone-web-client-id";
+      description = ''
+        Runtime path to a file holding the client ID of a NinjaOne **Web** app
+        (authorization code + refresh token grants), which turns on user context:
+        script runs and ticket writes, which NinjaOne only accepts from a
+        signed-in user, are sent with that user's token. Set together with
+        webClientSecretFile. Passed via systemd `LoadCredential`.
+      '';
+    };
+    webClientSecretFile = mkOption {
+      type = types.nullOr types.str;
+      default = null;
+      example = "/persist/secrets/ninjaone-web-client-secret";
+      description = "Runtime path to a file holding the Web app's client secret. Passed via systemd `LoadCredential`; never in the Nix store.";
+    };
+    oauthRedirectUrl = mkOption {
+      type = types.nullOr types.str;
+      default = null;
+      example = "http://localhost:8233/oauth/callback";
+      description = ''
+        The Web app's redirect URI: this server's `/oauth/callback`. Default
+        `http://<listenAddress>:<port>/oauth/callback` (127.0.0.1 for a wildcard
+        address). Must match the Web app exactly.
+      '';
+    };
+    persistedPaths = mkOption {
+      type = types.listOf types.str;
+      readOnly = true;
+      default = lib.optional userContext stateDir;
+      defaultText = literalExpression ''[ "/var/lib/private/ninjaone-mcp" ] with user context, else [ ]'';
+      description = ''
+        State to keep across reboots on an ephemeral root: the user's refresh
+        token, which the server rewrites on every use. The module does not set
+        persistence itself; add this to your impermanence list.
       '';
     };
     scopes = mkOption {
@@ -277,7 +323,21 @@ in
           message = "services.ninjaone-mcp.clientSecretFile must be an absolute runtime path to the API client secret.";
         }
         {
-          assertion = !(inStore cfg.clientSecretFile) && !(inStore cfg.bearerTokenFile);
+          assertion = (cfg.webClientIdFile == null) == (cfg.webClientSecretFile == null);
+          message = "services.ninjaone-mcp: set both webClientIdFile and webClientSecretFile, or neither.";
+        }
+        {
+          assertion = lib.all (p: p == null || lib.hasPrefix "/" p) [
+            cfg.webClientIdFile
+            cfg.webClientSecretFile
+          ];
+          message = "services.ninjaone-mcp: webClientIdFile and webClientSecretFile must be absolute paths.";
+        }
+        {
+          assertion =
+            !(inStore cfg.clientSecretFile)
+            && !(inStore cfg.bearerTokenFile)
+            && !(inStore cfg.webClientSecretFile);
           message = "services.ninjaone-mcp: secret files must not live in ${builtins.storeDir}, which is world-readable. Use sops-nix, agenix or a root-owned 0400 file.";
         }
         {
@@ -329,7 +389,14 @@ in
             "client-secret:${cfg.clientSecretFile}"
           ]
           ++ optional (cfg.clientIdFile != null) "client-id:${cfg.clientIdFile}"
-          ++ optional (cfg.bearerTokenFile != null) "http-auth-token:${cfg.bearerTokenFile}";
+          ++ optional (cfg.bearerTokenFile != null) "http-auth-token:${cfg.bearerTokenFile}"
+          ++ lib.optionals userContext [
+            "web-client-id:${cfg.webClientIdFile}"
+            "web-client-secret:${cfg.webClientSecretFile}"
+          ];
+          # The user's rotating refresh token; the server finds it via $STATE_DIRECTORY.
+          StateDirectory = mkIf userContext "ninjaone-mcp";
+          StateDirectoryMode = mkIf userContext "0700";
 
           User = mkIf staticUser cfg.user;
           Group = mkIf staticUser cfg.group;
