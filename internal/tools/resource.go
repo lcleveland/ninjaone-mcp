@@ -103,6 +103,9 @@ func help(views []View, maxBulk int) string {
 	b.WriteString("\n\nActions:")
 	for _, v := range views {
 		b.WriteString("\n- " + v.Action + ": " + v.Help)
+		if v.User {
+			b.WriteString(" Needs a signed-in NinjaOne user: sent with the user token from ninjaone_status action authorize, and audited in NinjaOne as that user.")
+		}
 	}
 	b.WriteString("\n\nLists return brief items (pass fields for others) and next_cursor when there is more; pass it back as cursor. Timestamps are RFC 3339 UTC.")
 	if slices.ContainsFunc(views, View.write) {

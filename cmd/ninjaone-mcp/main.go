@@ -48,10 +48,13 @@ func run(args []string) error {
 	defer stop()
 
 	c := ninjaone.New(cfg.BaseURL, cfg.ClientID, cfg.ClientSecret, cfg.Scopes, &http.Client{Timeout: cfg.RequestTimeout}, log)
+	if cfg.WebClientID != "" {
+		c.EnableUserContext(cfg.WebClientID, cfg.WebClientSecret, cfg.UserTokenFile)
+	}
 	s, n := server.New(cfg, c, log)
 	log.Info("registered tools", "count", n)
 	if cfg.HTTP {
-		return server.ServeHTTP(ctx, cfg, s, log)
+		return server.ServeHTTP(ctx, cfg, s, c, log)
 	}
 	return server.ServeStdio(ctx, s)
 }

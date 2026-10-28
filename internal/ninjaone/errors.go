@@ -98,7 +98,7 @@ func hint(e *APIError) string {
 	case tokenEndpoint && (e.Status == http.StatusBadRequest || e.Status == http.StatusUnauthorized):
 		return "the client credentials were rejected: check the client secret, and that the API Services app allows the client_credentials grant and the requested scopes."
 	case e.Code == "user_context_required":
-		return "this endpoint needs a signed-in NinjaOne user, which a client-credentials API client cannot provide; do it in the NinjaOne console instead."
+		return "this endpoint needs a signed-in NinjaOne user, which a client-credentials API client cannot provide. The operator can enable user context (a NinjaOne Web app; see the README section on running scripts); until then, do it in the NinjaOne console."
 	case e.Status == http.StatusForbidden || (e.Status == http.StatusInternalServerError && containsCode(e.Code)):
 		return "the API client lacks permission or scope for this (writes need the management scope). ninjaone_status shows the granted scopes."
 	case e.Status == http.StatusBadRequest && (e.Code == "missing_header" || e.Code == "invalid_header"):

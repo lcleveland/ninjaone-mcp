@@ -8,6 +8,8 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"os"
+	"path/filepath"
 	"testing"
 	"time"
 
@@ -34,6 +36,11 @@ func sessionLog(t *testing.T, cfg *config.Config, log *slog.Logger, h http.Handl
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		if r.URL.Path == "/ws/oauth/token" {
 			w.Header().Set("Content-Type", "application/json")
+			r.ParseForm()
+			if g := r.PostForm.Get("grant_type"); g == "refresh_token" || g == "authorization_code" {
+				io.WriteString(w, `{"access_token":"usertok","refresh_token":"rt-next","expires_in":3600,"token_type":"Bearer"}`)
+				return
+			}
 			io.WriteString(w, `{"access_token":"tok","expires_in":3600,"scope":"monitoring management control","token_type":"Bearer"}`)
 			return
 		}
@@ -53,6 +60,9 @@ func sessionLog(t *testing.T, cfg *config.Config, log *slog.Logger, h http.Handl
 	cfg.BaseURL = u
 	c := ninjaone.New(u, "id", "secret", "", srv.Client(), nil)
 	c.Attempts, c.BaseDelay = 1, time.Millisecond
+	if cfg.WebClientID != "" {
+		c.EnableUserContext(cfg.WebClientID, cfg.WebClientSecret, cfg.UserTokenFile)
+	}
 
 	s := mcp.NewServer(&mcp.Implementation{Name: "test"}, nil)
 	Register(s, Deps{Client: c, Config: cfg, Log: log})
@@ -107,4 +117,18 @@ func toolNames(t *testing.T, cs *mcp.ClientSession) map[string]*mcp.Tool {
 func jsonOK(w http.ResponseWriter, body string) {
 	w.Header().Set("Content-Type", "application/json")
 	io.WriteString(w, body)
+}
+
+// userConfig turns user context on, as a server in HTTP mode; authorized
+// stores a refresh token as if a user had signed in.
+func userConfig(t *testing.T, authorized bool) *config.Config {
+	t.Helper()
+	file := filepath.Join(t.TempDir(), "user-token.json")
+	if authorized {
+		if err := os.WriteFile(file, []byte(`{"refresh_token":"rt0"}`), 0o600); err != nil {
+			t.Fatal(err)
+		}
+	}
+	return &config.Config{HTTP: true, WebClientID: "web-id", WebClientSecret: "web-secret", UserTokenFile: file,
+		OAuthRedirectURL: "http://127.0.0.1:8233/oauth/callback"}
 }

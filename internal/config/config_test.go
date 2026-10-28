@@ -143,10 +143,79 @@ func TestHTTPListenerNeedsAuthOffLoopback(t *testing.T) {
 }
 
 func TestLogValueRedacts(t *testing.T) {
-	c := &Config{ClientID: "id", ClientSecret: "super-secret-value", HTTPAuthToken: "bearer-secret-value"}
+	c := &Config{ClientID: "id", ClientSecret: "super-secret-value", HTTPAuthToken: "bearer-secret-value", WebClientID: "web-id", WebClientSecret: "web-secret-value"}
 	var b strings.Builder
 	slog.New(slog.NewTextHandler(&b, nil)).Info("cfg", "config", c)
-	if s := b.String(); strings.Contains(s, "super-secret-value") || strings.Contains(s, "bearer-secret-value") {
+	if s := b.String(); strings.Contains(s, "super-secret-value") || strings.Contains(s, "bearer-secret-value") || strings.Contains(s, "web-secret-value") || !strings.Contains(s, "web_client_secret_set=true") {
 		t.Errorf("secret logged: %s", s)
+	}
+}
+
+func TestUserContextCredentials(t *testing.T) {
+	base := []string{"--region", "us2", "--client-id", "id", "--client-secret-file", secretFile(t, "s", "sec")}
+	flagID, flagSecret := secretFile(t, "fid", "id-from-flag"), secretFile(t, "fsec", "secret-from-flag")
+	credDir := filepath.Dir(secretFile(t, "web-client-id", "id-from-cred"))
+	os.WriteFile(filepath.Join(credDir, "web-client-secret"), []byte("secret-from-cred\n"), 0o400)
+
+	cases := []struct {
+		name             string
+		args             []string
+		env              map[string]string
+		id, secret, file string
+		err              string
+	}{
+		{"off by default", base, nil, "", "", "", ""},
+		{"flags win, explicit token file", append(base, "--web-client-id-file", flagID, "--web-client-secret-file", flagSecret, "--user-token-file", "/x/tok.json"),
+			map[string]string{"CREDENTIALS_DIRECTORY": credDir}, "id-from-flag", "secret-from-flag", "/x/tok.json", ""},
+		{"systemd credentials, state directory", base, map[string]string{"CREDENTIALS_DIRECTORY": credDir, "STATE_DIRECTORY": "/var/lib/n:/other"},
+			"id-from-cred", "secret-from-cred", "/var/lib/n/user-token.json", ""},
+		{"only one set", append(base, "--web-client-id-file", flagID), nil, "", "", "", "both"},
+		{"no token path", append(base, "--web-client-id-file", flagID, "--web-client-secret-file", flagSecret), nil, "", "", "", "user-token-file"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c, _, err := Parse(tc.args, env(tc.env))
+			if tc.err != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.err) {
+					t.Fatalf("err = %v, want %q", err, tc.err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if c.WebClientID != tc.id || c.WebClientSecret != tc.secret || c.UserTokenFile != tc.file {
+				t.Errorf("got %q %q %q", c.WebClientID, c.WebClientSecret, c.UserTokenFile)
+			}
+		})
+	}
+}
+
+func TestOAuthRedirectURL(t *testing.T) {
+	base := []string{"--region", "us2", "--client-id", "id", "--client-secret-file", secretFile(t, "s", "sec"),
+		"--web-client-id-file", secretFile(t, "i", "wid"), "--web-client-secret-file", secretFile(t, "w", "wsec"), "--user-token-file", "/x/t.json"}
+	cases := []struct {
+		args []string
+		want string
+	}{
+		{base, "http://127.0.0.1:8233/oauth/callback"},
+		{append(base, "--addr", "0.0.0.0:9000", "--http", "--http-auth-token-file", secretFile(t, "h", "tok")), "http://127.0.0.1:9000/oauth/callback"},
+		{append(base, "--oauth-redirect-url", "http://localhost:8233/oauth/callback"), "http://localhost:8233/oauth/callback"},
+	}
+	for _, tc := range cases {
+		c, _, err := Parse(tc.args, env(nil))
+		if err != nil || c.OAuthRedirectURL != tc.want {
+			t.Errorf("%v: %v %q, want %q", tc.args[len(base)-1:], err, c.OAuthRedirectURL, tc.want)
+		}
+	}
+}
+
+func TestOAuthRedirectURLMustBeAURLWithAPath(t *testing.T) {
+	base := []string{"--region", "us2", "--client-id", "id", "--client-secret-file", secretFile(t, "s", "sec"),
+		"--web-client-id-file", secretFile(t, "i", "wid"), "--web-client-secret-file", secretFile(t, "w", "wsec"), "--user-token-file", "/x/t.json"}
+	for _, bad := range []string{"http://127.0.0.1:8233", "127.0.0.1:8233/oauth/callback", "ftp://h/cb"} {
+		if _, _, err := Parse(append(base, "--oauth-redirect-url", bad), env(nil)); err == nil || !strings.Contains(err.Error(), "--oauth-redirect-url") {
+			t.Errorf("%s: err = %v", bad, err)
+		}
 	}
 }

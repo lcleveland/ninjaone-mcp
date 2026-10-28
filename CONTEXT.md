@@ -16,6 +16,18 @@ _Avoid_: host, datacenter
 The NinjaOne API Services application whose client ID and secret the server authenticates as.
 _Avoid_: app, service account, token
 
+**Web app**:
+The second NinjaOne application, platform Web, through which a user signs in so the server can act as them. Distinct from the API client.
+_Avoid_: app (alone), OAuth app
+
+**User context**:
+Writes sent with a signed-in user's token instead of the API client's, because NinjaOne accepts them only from a user (script runs, ticket writes); audited in NinjaOne as that user.
+_Avoid_: impersonation, user mode
+
+**Sign-in**:
+The one-time browser consent (`ninjaone_status` action authorize, then `/oauth/callback`) that gives the server a user's rotating refresh token.
+_Avoid_: login, auth (alone)
+
 **Capability**:
 A named class of write the operator opts into (e.g. device actions, scripts, custom fields); writes outside an enabled capability do not exist for the client.
 _Avoid_: permission, verb flag

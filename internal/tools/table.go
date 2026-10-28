@@ -40,6 +40,9 @@ type View struct {
 	Confirm     bool     // confirm must equal the device's display name
 	Dispatch    bool     // async on the agent: report a dispatch, not success
 	Destructive bool
+	// NinjaOne only accepts it from a signed-in user: sent with the user
+	// token when user context is configured.
+	User bool
 }
 
 func (v View) method() string {

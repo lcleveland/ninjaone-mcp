@@ -50,8 +50,12 @@ func (d Deps) write(ctx context.Context, tool string, v View, in Input) (any, er
 	if v.Multipart != "" {
 		send = ninjaone.Multipart{Part: v.Multipart, Value: body}
 	}
-	resp, err := d.Client.Do(ctx, v.method(), path, q, send)
-	audit := []any{"tool", tool, "action", v.Action, "capability", v.Capability, "method", v.method(), "path", path, "reason", reason}
+	do, asUser := d.Client.Do, v.User && d.Client.UserState().Configured
+	if asUser {
+		do = d.Client.DoUser // no user signed in: fails before anything is sent
+	}
+	resp, err := do(ctx, v.method(), path, q, send)
+	audit := []any{"tool", tool, "action", v.Action, "capability", v.Capability, "method", v.method(), "path", path, "reason", reason, "as_user", asUser}
 	if err != nil {
 		var ae *ninjaone.APIError
 		if errors.As(err, &ae) {
