@@ -235,7 +235,7 @@ func (d Deps) generic(ctx context.Context, rs []route, in APIInput) (any, error)
 
 	// The same write path as the first-class tools.
 	v := View{Action: method + " " + r.pattern, Method: method, Path: path, Capability: r.capability,
-		Body: true, Bulk: true, Confirm: r.confirm, Dispatch: r.dispatch}
+		Body: true, Bulk: true, Confirm: r.confirm, Dispatch: r.dispatch, User: userRoute(method, r.pattern)}
 	wi := Input{Body: in.Body, Reason: in.Reason, Confirm: in.Confirm, Query: in.Query}
 	if r.confirm || r.dispatch {
 		// These routes are all /v2/device/{id}/...: the id is the 3rd segment.
@@ -272,4 +272,17 @@ func apiPath(p string) (string, error) {
 		return "", bad
 	}
 	return strings.TrimSuffix(p, "/"), nil
+}
+
+// userRoute reports whether a first-class view on this route needs the user
+// token, so ninjaone_api cannot send it with the app's instead.
+func userRoute(method, pattern string) bool {
+	for _, t := range Tools() {
+		for _, v := range t.Views {
+			if v.User && v.method() == method && v.Path == pattern {
+				return true
+			}
+		}
+	}
+	return false
 }

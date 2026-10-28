@@ -130,11 +130,11 @@ var readTools = []Tool{
 			{Action: "form", Help: "one ticket form (id).", Path: "/v2/ticketing/ticket-form/{id}", Single: true},
 			{Action: "contacts", Help: "ticketing contacts.", Path: "/v2/ticketing/contact/contacts"},
 			{Action: "create", Help: "create a ticket; body {clientId, ticketFormId, subject, description: {public, body}, status, priority, severity, type, nodeId, requesterUid, ...}.", Method: "POST",
-				Path: "/v2/ticketing/ticket", Capability: "tickets", Body: true},
+				Path: "/v2/ticketing/ticket", Capability: "tickets", Body: true, User: true},
 			{Action: "update", Help: "update ticket id; body must carry the version from get (a stale version is refused).", Method: "PUT",
-				Path: "/v2/ticketing/ticket/{id}", Capability: "tickets", Body: true, Require: []string{"version"}},
+				Path: "/v2/ticketing/ticket/{id}", Capability: "tickets", Body: true, Require: []string{"version"}, User: true},
 			{Action: "comment", Help: "comment on ticket id; body {public: bool, body or htmlBody, timeTracked (seconds)}. A public comment can email the requester.", Method: "POST",
-				Path: "/v2/ticketing/ticket/{id}/comment", Capability: "tickets", Body: true, Multipart: "comment", Require: []string{"public"}},
+				Path: "/v2/ticketing/ticket/{id}/comment", Capability: "tickets", Body: true, Multipart: "comment", Require: []string{"public"}, User: true},
 		}},
 
 	// backup

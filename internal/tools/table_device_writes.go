@@ -41,7 +41,7 @@ var deviceWriteTools = []Tool{
 			{Action: "scheduled_tasks", Help: "scheduled automation tasks (id, name, description, enabled, lastRun).", Path: "/v2/tasks"},
 			{Action: "options", Help: "scripts, built-in actions and credentials available to run on device id.", Path: "/v2/device/{id}/scripting/options", Single: true},
 			{Action: "run", Help: "run on device id; body {type: SCRIPT|ACTION, id (script) or uid (action), parameters, runAs}. confirm must be the device's display name.", Method: "POST",
-				Path: "/v2/device/{id}/script/run", Capability: "scripts", Body: true, Require: []string{"type"}, Dispatch: true, Confirm: true, Destructive: true},
+				Path: "/v2/device/{id}/script/run", Capability: "scripts", Body: true, Require: []string{"type"}, Dispatch: true, Confirm: true, Destructive: true, User: true},
 		}},
 }
 

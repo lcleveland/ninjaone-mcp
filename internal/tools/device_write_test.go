@@ -115,7 +115,7 @@ func TestUserContextRequiredHint(t *testing.T) {
 		jsonOK(w, `{"resultCode":"user_context_required"}`)
 	})
 	_, isErr, text := call(t, cs, "ninjaone_script", map[string]any{"action": "run", "id": 5, "reason": "x", "confirm": "FS01", "body": map[string]any{"type": "ACTION", "uid": "u"}})
-	if !isErr || !strings.Contains(text, "signed-in NinjaOne user") {
+	if !isErr || !strings.Contains(text, "signed-in NinjaOne user") || !strings.Contains(text, "user context") {
 		t.Errorf("text = %s", text)
 	}
 }
