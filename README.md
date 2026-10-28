@@ -89,6 +89,70 @@ There is no flag that takes the secret directly.
 
 `ninjaone_status` shows the scopes the token was actually granted. A 404 from the token endpoint usually means the wrong region.
 
+## nj: running scripts as a user
+
+`script/run` needs a signed-in user, so an API Services client cannot make it (`403 user_context_required`). `nj` (`tools/nj.py`, one stdlib-only Python file, no dependencies) runs library scripts with a user's token instead. The run is audited as that user. The same file has read helpers (`analyze`, `grep`, `find`, `get`, `scripts`, `move`) that call the REST API directly.
+
+```
+nj auth                                      once: browser consent, stores a refresh token
+nj scripts                                   library scripts: id, name, language
+nj run PC-0001 <scriptId> [params]           dry run, prints the request
+nj run PC-0001 <scriptId> [params] --apply   dispatch as SYSTEM
+nj analyze PC-0001                           one-page device report
+nj grep PC-0001 bluetooth [days]             rows from every dataset matching a regex
+nj find 0001 | nj get /v2/queries/disks | nj move PC-0001 <locationId> [--apply]
+nj selftest                                  offline check, touches no tenant
+```
+
+A device is an id, an exact name or a substring of the name. An ambiguous substring lists the matches and stops.
+
+### Install
+
+```nix
+# flake inputs: ninjaone-mcp.url = "github:lcleveland/ninjaone-mcp";
+environment.systemPackages = [ ninjaone-mcp.packages.${pkgs.stdenv.hostPlatform.system}.nj ];
+```
+
+Or without installing: `nix run github:lcleveland/ninjaone-mcp#nj -- scripts`. With the overlay it is `pkgs.nj`. Without Nix, run `python3 tools/nj.py`.
+
+### Set up
+
+`nj` uses two NinjaOne apps. The API Services app reads (device lookup, `scripts`, `analyze` and the rest, `run` included). The Web app only dispatches `run`, as the signed-in user.
+
+1. **API Services app.** Create it as in [Getting an API client](#getting-an-api-client). `monitoring` is enough for `nj`. If you already run this server, reuse its client.
+2. **Web app.** In **Administration → Apps → API → Client App IDs → Add**, pick the **Web** platform, the one that has a client secret and a Redirect URI (not API Services, not a native or single-page platform). Set:
+   - Redirect URI `http://localhost:8765/callback`
+   - Scopes **Monitoring**, **Management** and **Control**
+   - Allowed grant types **Authorization code** and **Refresh token**
+
+   Choose the platform and the grant types on the Add form: the Edit view does not show the platform, and shows only Refresh token under grant types, so a mistake there is hard to see afterwards. Save, then copy the client ID and secret. The app list then shows `offline_access` next to the three scopes. That comes from the Refresh token grant, and `nj auth` asks for it.
+3. **Config.** The directory is `${XDG_CONFIG_HOME:-~/.config}/ninjaone`:
+   ```sh
+   d=${XDG_CONFIG_HOME:-$HOME/.config}/ninjaone
+   mkdir -p "$d" && chmod 700 "$d"
+   printf 'NINJAONE_REGION=us2\nNINJAONE_CLIENT_ID=<api services id>\n' > "$d/env"
+   printf '%s' '<api services secret>' > "$d/client-secret"
+   printf 'NINJAONE_WEB_CLIENT_ID=<web id>\nNINJAONE_WEB_CLIENT_SECRET=<web secret>\n' > "$d/webapp.env"
+   chmod 400 "$d/client-secret" "$d/webapp.env"
+   ```
+   `NINJAONE_REGION` takes the same values as the server (`app`, `us`, `us2`, `eu`, `ca`, `oc`, `fed`), or set `NINJAONE_BASE_URL`. Use the region: a vanity admin domain may load the console but is not reliable for the OAuth token endpoint. The secret can instead be `NINJAONE_CLIENT_SECRET_FILE=<path>` in `env`, which is what the server uses. `NINJAONE_SCOPES` defaults to `monitoring`.
+4. **Consent.** `nj auth` prints a URL and listens on `127.0.0.1:8765` for the redirect, so open the URL in a browser on the same machine (over SSH, forward that port). Sign in as the user who should own the runs and click Authorize. It prints `saved .../user-tokens.json`.
+5. **Check.** `nj scripts` lists the library, and `nj run PC-0001 <scriptId>` prints the request without sending it.
+
+Any key can also come from the environment, which wins over the files. The `NINJAONE_*` names match the server's, so one environment can serve both.
+
+### Running and reading results
+
+`run` is a dry run unless you pass `--apply`. The script runs as SYSTEM. A dispatch is queued to the agent and not confirmed, and an offline device holds it until the agent checks in. Read the outcome from the device's activities. With this server that is `ninjaone_activity`; the script output is at `data.message.params.output` in each activity. `nj get /v2/device/<id>/activities` also works but can be very slow.
+
+### Notes
+
+- Only library scripts run. The public API cannot create or edit scripts (`GET /v2/automation/scripts` is all there is), so import them in the console (Administration → Library → Automation).
+- `user-tokens.json` (mode 0600) holds the user's refresh token, which can run scripts as SYSTEM on every device that user can reach. Treat it like a password.
+- The refresh token rotates on every use, so keep one token file per machine, and keep it across reboots. If the home directory is ephemeral (impermanence), persist `~/.config/ninjaone`, or run `nj auth` again after each boot.
+- A rejected refresh token (revoked app, user disabled) fails the run; run `nj auth` again.
+- `nix flake check` builds `nj` and runs `nj selftest`.
+
 ## Nix
 
 ```nix
@@ -166,7 +230,7 @@ claude mcp add ninjaone -e NINJAONE_REGION=us2 -e NINJAONE_CLIENT_ID=<id> \
 - The syntax of `of` on `/v2/organizations` is still unknown: `name = …`, `id = 1`, `org = 1` and `org in (1)` all return `500 InvalidFilterException`.
 - A client-credentials API client with `monitoring` and `management` scopes can read everything checked, and sees organization 1 and about 480 devices.
 - No throttling seen: 100, then 500 concurrent `GET /v2/organizations` all succeeded, the 500 in 0.85 s with none slower than 0.75 s, so nothing was retried. The real limit is higher, or applies elsewhere.
-- `script/run` returns `403 user_context_required` for an API client, so the `scripts` capability cannot run scripts unless NinjaOne grants user context.
+- `script/run` returns `403 user_context_required` for an API client, so the `scripts` capability cannot run scripts unless NinjaOne grants user context. [`nj`](#nj-running-scripts-as-a-user) is the workaround.
 
 Still unverified: what a throttled response looks like (the client treats a 429 or an HTML page as throttling and retries GETs only), whether technician roles limit an API client, and ticket writes (this tenant does not use NinjaOne ticketing).
 

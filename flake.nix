@@ -30,6 +30,7 @@
 
       packages = forAllSystems (system: rec {
         ninjaone-mcp = (pkgsFor system).callPackage ./pkgs/ninjaone-mcp.nix { };
+        nj = (pkgsFor system).callPackage ./pkgs/nj.nix { };
         default = ninjaone-mcp;
       });
 
@@ -38,6 +39,8 @@
         {
           # Runs the Go test suite in checkPhase.
           package = self.packages.${system}.ninjaone-mcp;
+          # Builds nj and runs its offline selftest as the install check.
+          nj = self.packages.${system}.nj;
         }
         // import ./tests/eval.nix {
           inherit self lib;
