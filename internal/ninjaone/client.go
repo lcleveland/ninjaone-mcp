@@ -35,6 +35,8 @@ type Client struct {
 	expiry time.Time
 	scope  string // as granted by the last token response
 
+	user *user // nil unless EnableUserContext was called
+
 	// Retry tuning; tests shrink these.
 	Attempts  int
 	BaseDelay time.Duration
@@ -108,36 +110,55 @@ func (c *Client) bearer(ctx context.Context, force bool) (string, error) {
 	if c.scopes != "" {
 		form.Set("scope", c.scopes)
 	}
+	t, err := c.tokenRequest(ctx, form)
+	if err != nil {
+		return "", err
+	}
+	c.token, c.scope, c.expiry = t.AccessToken, t.Scope, t.Expiry
+	return c.token, nil
+}
+
+type tokenResponse struct {
+	AccessToken  string
+	RefreshToken string
+	Scope        string
+	Expiry       time.Time
+}
+
+// tokenRequest POSTs one grant to the token endpoint.
+func (c *Client) tokenRequest(ctx context.Context, form url.Values) (tokenResponse, error) {
+	// A server echoing the grant back must not leak its refresh token or code.
+	scrub := func(s string) string { return c.scrub(s, form.Get("refresh_token"), form.Get("code")) }
 	u := c.url("/ws/oauth/token")
 	req, err := http.NewRequestWithContext(ctx, http.MethodPost, u, strings.NewReader(form.Encode()))
 	if err != nil {
-		return "", err
+		return tokenResponse{}, err
 	}
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	req.Header.Set("Accept", "application/json")
 	resp, err := c.hc.Do(req)
 	if err != nil {
-		return "", fmt.Errorf("token request: %s", c.scrub(err.Error()))
+		return tokenResponse{}, fmt.Errorf("token request: %s", scrub(err.Error()))
 	}
 	b, _ := io.ReadAll(io.LimitReader(resp.Body, 1<<20))
 	resp.Body.Close()
 	if resp.StatusCode != http.StatusOK {
-		return "", newAPIError(http.MethodPost, "/ws/oauth/token", resp, b, func(s string) string { return c.scrub(s) })
+		return tokenResponse{}, newAPIError(http.MethodPost, "/ws/oauth/token", resp, b, scrub)
 	}
 	var t struct {
-		AccessToken string  `json:"access_token"`
-		ExpiresIn   float64 `json:"expires_in"`
-		Scope       string  `json:"scope"`
+		AccessToken  string  `json:"access_token"`
+		RefreshToken string  `json:"refresh_token"`
+		ExpiresIn    float64 `json:"expires_in"`
+		Scope        string  `json:"scope"`
 	}
 	if err := json.Unmarshal(b, &t); err != nil || t.AccessToken == "" {
-		return "", fmt.Errorf("token request: unexpected response from %s (is the base URL a NinjaOne instance?)", c.base.Host)
+		return tokenResponse{}, fmt.Errorf("token request: unexpected response from %s (is the base URL a NinjaOne instance?)", c.base.Host)
 	}
 	if t.ExpiresIn <= 0 {
 		t.ExpiresIn = 3600
 	}
-	c.token, c.scope = t.AccessToken, t.Scope
-	c.expiry = time.Now().Add(time.Duration(t.ExpiresIn) * time.Second)
-	return c.token, nil
+	return tokenResponse{AccessToken: t.AccessToken, RefreshToken: t.RefreshToken, Scope: t.Scope,
+		Expiry: time.Now().Add(time.Duration(t.ExpiresIn) * time.Second)}, nil
 }
 
 // Multipart sends Value as a JSON part named Part of a multipart/form-data
@@ -153,6 +174,11 @@ type Multipart struct {
 // Only GETs are retried: NinjaOne actions take no idempotency key, so a
 // retried POST can reboot a machine or run a script twice.
 func (c *Client) Do(ctx context.Context, method, path string, q url.Values, body any) (*Response, error) {
+	return c.do(ctx, c.bearer, method, path, q, body)
+}
+
+// do is Do with the token source chosen: the app's or the user's.
+func (c *Client) do(ctx context.Context, bearer func(context.Context, bool) (string, error), method, path string, q url.Values, body any) (*Response, error) {
 	payload, contentType, err := encode(body)
 	if err != nil {
 		return nil, err
@@ -167,7 +193,7 @@ func (c *Client) Do(ctx context.Context, method, path string, q url.Values, body
 	reauthed := false
 
 	for attempt := 1; ; attempt++ {
-		tok, err := c.bearer(ctx, false)
+		tok, err := bearer(ctx, false)
 		if err != nil {
 			return nil, err
 		}
@@ -207,7 +233,7 @@ func (c *Client) Do(ctx context.Context, method, path string, q url.Values, body
 		if resp.StatusCode == http.StatusUnauthorized && !reauthed {
 			// The token was revoked or expired early; one fresh token, then give up.
 			reauthed = true
-			if _, err := c.bearer(ctx, true); err != nil {
+			if _, err := bearer(ctx, true); err != nil {
 				return nil, err
 			}
 			attempt--
@@ -295,9 +321,13 @@ func (c *Client) wait(ctx context.Context, attempt int, retryAfter string) error
 	}
 }
 
-// scrub hides the client secret and any access tokens passed in.
+// scrub hides the client secrets and any tokens passed in.
 func (c *Client) scrub(s string, tokens ...string) string {
-	for _, secret := range append(tokens, c.clientSecret) {
+	tokens = append(tokens, c.clientSecret)
+	if c.user != nil {
+		tokens = append(tokens, c.user.clientSecret)
+	}
+	for _, secret := range tokens {
 		if len(secret) >= 4 {
 			s = strings.ReplaceAll(s, secret, "[redacted]")
 		}

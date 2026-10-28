@@ -49,7 +49,14 @@ type Config struct {
 	ClientSecret   string
 	Scopes         string // space-separated; empty asks for every scope on the app
 	RequestTimeout time.Duration
-	LogLevel       slog.Level
+
+	// User context (a Web app), for writes NinjaOne only accepts from a
+	// signed-in user. All empty when off.
+	WebClientID     string
+	WebClientSecret string
+	UserTokenFile   string // the rotating refresh token, rewritten by the server
+
+	LogLevel slog.Level
 
 	Allow   map[string]bool // capability -> enabled
 	MaxBulk int
@@ -74,6 +81,9 @@ func (c *Config) LogValue() slog.Value {
 		slog.String("client_id", c.ClientID),
 		slog.Bool("client_secret_set", c.ClientSecret != ""),
 		slog.String("scopes", c.Scopes),
+		slog.String("web_client_id", c.WebClientID),
+		slog.Bool("web_client_secret_set", c.WebClientSecret != ""),
+		slog.String("user_token_file", c.UserTokenFile),
 		slog.Any("capabilities", c.Enabled()),
 		slog.Int("max_bulk", c.MaxBulk),
 		slog.Any("groups", c.Groups),
@@ -90,6 +100,7 @@ func Parse(args []string, getenv func(string) string) (*Config, []string, error)
 		c                                 Config
 		region, rawURL, secretFile, hauth string
 		idFile                            string
+		webIDFile, webSecretFile          string
 		groups, logLevel                  string
 		stdio                             bool
 		warnings                          []string
@@ -104,6 +115,9 @@ func Parse(args []string, getenv func(string) string) (*Config, []string, error)
 	fs.StringVar(&c.ClientID, "client-id", getenv("NINJAONE_CLIENT_ID"), "API Services client ID (env NINJAONE_CLIENT_ID)")
 	fs.StringVar(&idFile, "client-id-file", getenv("NINJAONE_CLIENT_ID_FILE"), "file holding the client ID, instead of --client-id (env NINJAONE_CLIENT_ID_FILE)")
 	fs.StringVar(&secretFile, "client-secret-file", getenv("NINJAONE_CLIENT_SECRET_FILE"), "file holding the client secret (env NINJAONE_CLIENT_SECRET_FILE)")
+	fs.StringVar(&webIDFile, "web-client-id-file", getenv("NINJAONE_WEB_CLIENT_ID_FILE"), "file holding the Web app's client ID, for user context (env NINJAONE_WEB_CLIENT_ID_FILE)")
+	fs.StringVar(&webSecretFile, "web-client-secret-file", getenv("NINJAONE_WEB_CLIENT_SECRET_FILE"), "file holding the Web app's client secret, for user context (env NINJAONE_WEB_CLIENT_SECRET_FILE)")
+	fs.StringVar(&c.UserTokenFile, "user-token-file", getenv("NINJAONE_USER_TOKEN_FILE"), "file the server keeps the user's refresh token in (default $STATE_DIRECTORY/user-token.json) (env NINJAONE_USER_TOKEN_FILE)")
 	fs.StringVar(&c.Scopes, "scopes", "", "space-separated OAuth scopes to request (default: all scopes on the app)")
 	fs.DurationVar(&c.RequestTimeout, "request-timeout", 30*time.Second, "per-request timeout to NinjaOne")
 	fs.StringVar(&logLevel, "log-level", or(getenv("NINJAONE_MCP_LOG_LEVEL"), "info"), "debug|info|warn|error (env NINJAONE_MCP_LOG_LEVEL)")
@@ -178,6 +192,10 @@ func Parse(args []string, getenv func(string) string) (*Config, []string, error)
 		return nil, nil, err
 	}
 
+	if err := c.userContext(webIDFile, webSecretFile, credDir, getenv("STATE_DIRECTORY")); err != nil {
+		return nil, nil, err
+	}
+
 	if groups != "" {
 		for g := range strings.SplitSeq(groups, ",") {
 			g = strings.TrimSpace(g)
@@ -236,6 +254,43 @@ func baseURL(region, raw string) (*url.URL, error) {
 		return nil, fmt.Errorf("--base-url must use https unless the host is loopback, got %q", raw)
 	}
 	return u, nil
+}
+
+// userContext reads the Web app's credentials: files first, else the systemd
+// credentials web-client-id and web-client-secret. Both or neither.
+func (c *Config) userContext(idFile, secretFile, credDir, stateDir string) error {
+	read := func(file, cred string) (string, error) {
+		switch {
+		case file != "":
+			return readSecret(file)
+		case credDir != "":
+			s, _ := readSecret(filepath.Join(credDir, cred))
+			return s, nil
+		}
+		return "", nil
+	}
+	var err error
+	if c.WebClientID, err = read(idFile, "web-client-id"); err != nil {
+		return err
+	}
+	if c.WebClientSecret, err = read(secretFile, "web-client-secret"); err != nil {
+		return err
+	}
+	switch {
+	case c.WebClientID == "" && c.WebClientSecret == "":
+		c.UserTokenFile = ""
+		return nil
+	case c.WebClientID == "" || c.WebClientSecret == "":
+		return errors.New("user context needs both the Web app's client ID and secret (--web-client-id-file and --web-client-secret-file, or the systemd credentials web-client-id and web-client-secret)")
+	}
+	if c.UserTokenFile == "" && stateDir != "" {
+		// systemd may list several state directories; the first is ours.
+		c.UserTokenFile = filepath.Join(strings.SplitN(stateDir, ":", 2)[0], "user-token.json")
+	}
+	if c.UserTokenFile == "" {
+		return errors.New("user context needs somewhere to keep the refresh token: set --user-token-file, or run under systemd with StateDirectory")
+	}
+	return nil
 }
 
 // Enabled lists the enabled capabilities, in declaration order.

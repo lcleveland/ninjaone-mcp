@@ -143,10 +143,50 @@ func TestHTTPListenerNeedsAuthOffLoopback(t *testing.T) {
 }
 
 func TestLogValueRedacts(t *testing.T) {
-	c := &Config{ClientID: "id", ClientSecret: "super-secret-value", HTTPAuthToken: "bearer-secret-value"}
+	c := &Config{ClientID: "id", ClientSecret: "super-secret-value", HTTPAuthToken: "bearer-secret-value", WebClientID: "web-id", WebClientSecret: "web-secret-value"}
 	var b strings.Builder
 	slog.New(slog.NewTextHandler(&b, nil)).Info("cfg", "config", c)
-	if s := b.String(); strings.Contains(s, "super-secret-value") || strings.Contains(s, "bearer-secret-value") {
+	if s := b.String(); strings.Contains(s, "super-secret-value") || strings.Contains(s, "bearer-secret-value") || strings.Contains(s, "web-secret-value") || !strings.Contains(s, "web_client_secret_set=true") {
 		t.Errorf("secret logged: %s", s)
+	}
+}
+
+func TestUserContextCredentials(t *testing.T) {
+	base := []string{"--region", "us2", "--client-id", "id", "--client-secret-file", secretFile(t, "s", "sec")}
+	flagID, flagSecret := secretFile(t, "fid", "id-from-flag"), secretFile(t, "fsec", "secret-from-flag")
+	credDir := filepath.Dir(secretFile(t, "web-client-id", "id-from-cred"))
+	os.WriteFile(filepath.Join(credDir, "web-client-secret"), []byte("secret-from-cred\n"), 0o400)
+
+	cases := []struct {
+		name             string
+		args             []string
+		env              map[string]string
+		id, secret, file string
+		err              string
+	}{
+		{"off by default", base, nil, "", "", "", ""},
+		{"flags win, explicit token file", append(base, "--web-client-id-file", flagID, "--web-client-secret-file", flagSecret, "--user-token-file", "/x/tok.json"),
+			map[string]string{"CREDENTIALS_DIRECTORY": credDir}, "id-from-flag", "secret-from-flag", "/x/tok.json", ""},
+		{"systemd credentials, state directory", base, map[string]string{"CREDENTIALS_DIRECTORY": credDir, "STATE_DIRECTORY": "/var/lib/n:/other"},
+			"id-from-cred", "secret-from-cred", "/var/lib/n/user-token.json", ""},
+		{"only one set", append(base, "--web-client-id-file", flagID), nil, "", "", "", "both"},
+		{"no token path", append(base, "--web-client-id-file", flagID, "--web-client-secret-file", flagSecret), nil, "", "", "", "user-token-file"},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			c, _, err := Parse(tc.args, env(tc.env))
+			if tc.err != "" {
+				if err == nil || !strings.Contains(err.Error(), tc.err) {
+					t.Fatalf("err = %v, want %q", err, tc.err)
+				}
+				return
+			}
+			if err != nil {
+				t.Fatal(err)
+			}
+			if c.WebClientID != tc.id || c.WebClientSecret != tc.secret || c.UserTokenFile != tc.file {
+				t.Errorf("got %q %q %q", c.WebClientID, c.WebClientSecret, c.UserTokenFile)
+			}
+		})
 	}
 }
