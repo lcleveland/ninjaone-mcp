@@ -190,3 +190,32 @@ func TestUserContextCredentials(t *testing.T) {
 		})
 	}
 }
+
+func TestOAuthRedirectURL(t *testing.T) {
+	base := []string{"--region", "us2", "--client-id", "id", "--client-secret-file", secretFile(t, "s", "sec"),
+		"--web-client-id-file", secretFile(t, "i", "wid"), "--web-client-secret-file", secretFile(t, "w", "wsec"), "--user-token-file", "/x/t.json"}
+	cases := []struct {
+		args []string
+		want string
+	}{
+		{base, "http://127.0.0.1:8233/oauth/callback"},
+		{append(base, "--addr", "0.0.0.0:9000", "--http", "--http-auth-token-file", secretFile(t, "h", "tok")), "http://127.0.0.1:9000/oauth/callback"},
+		{append(base, "--oauth-redirect-url", "http://localhost:8233/oauth/callback"), "http://localhost:8233/oauth/callback"},
+	}
+	for _, tc := range cases {
+		c, _, err := Parse(tc.args, env(nil))
+		if err != nil || c.OAuthRedirectURL != tc.want {
+			t.Errorf("%v: %v %q, want %q", tc.args[len(base)-1:], err, c.OAuthRedirectURL, tc.want)
+		}
+	}
+}
+
+func TestOAuthRedirectURLMustBeAURLWithAPath(t *testing.T) {
+	base := []string{"--region", "us2", "--client-id", "id", "--client-secret-file", secretFile(t, "s", "sec"),
+		"--web-client-id-file", secretFile(t, "i", "wid"), "--web-client-secret-file", secretFile(t, "w", "wsec"), "--user-token-file", "/x/t.json"}
+	for _, bad := range []string{"http://127.0.0.1:8233", "127.0.0.1:8233/oauth/callback", "ftp://h/cb"} {
+		if _, _, err := Parse(append(base, "--oauth-redirect-url", bad), env(nil)); err == nil || !strings.Contains(err.Error(), "--oauth-redirect-url") {
+			t.Errorf("%s: err = %v", bad, err)
+		}
+	}
+}

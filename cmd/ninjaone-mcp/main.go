@@ -54,7 +54,7 @@ func run(args []string) error {
 	s, n := server.New(cfg, c, log)
 	log.Info("registered tools", "count", n)
 	if cfg.HTTP {
-		return server.ServeHTTP(ctx, cfg, s, log)
+		return server.ServeHTTP(ctx, cfg, s, c, log)
 	}
 	return server.ServeStdio(ctx, s)
 }

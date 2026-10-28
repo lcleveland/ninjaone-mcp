@@ -3,12 +3,15 @@ package ninjaone
 import (
 	"cmp"
 	"context"
+	"crypto/rand"
+	"crypto/subtle"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"net/url"
 	"os"
 	"path/filepath"
+	"strings"
 	"sync"
 	"time"
 )
@@ -30,12 +33,82 @@ type user struct {
 	token  string
 	expiry time.Time
 	failed bool // the last refresh was rejected
+
+	// One sign-in at a time: a new AuthorizeURL replaces the pending one.
+	pending *pending
+	now     func() time.Time
 }
+
+type pending struct {
+	state, redirect string
+	expires         time.Time
+}
+
+// ErrBadState is a callback whose state is not the pending one: wrong,
+// already used, replaced by a newer link, or expired.
+var ErrBadState = errors.New("this sign-in link is stale or was already used: ask for a new one (ninjaone_status action authorize)")
+
+// authorizeScope is what the user token may do; offline_access gets the refresh token.
+const authorizeScope = "monitoring management control offline_access"
 
 // EnableUserContext turns on DoUser with a Web app's client ID and secret,
 // keeping the rotating refresh token in file.
 func (c *Client) EnableUserContext(clientID, clientSecret, file string) {
-	c.user = &user{clientID: clientID, clientSecret: clientSecret, file: file}
+	c.user = &user{clientID: clientID, clientSecret: clientSecret, file: file, now: time.Now}
+}
+
+// AuthorizeURL starts a sign-in: the consent URL, valid for 10 minutes,
+// that sends the browser back to redirect with a single-use state.
+func (c *Client) AuthorizeURL(redirect string) (string, error) {
+	if c.user == nil {
+		return "", errors.New("user context is not configured on this server")
+	}
+	u := c.user
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	u.pending = &pending{state: rand.Text(), redirect: redirect, expires: u.now().Add(10 * time.Minute)}
+	q := url.Values{
+		"response_type": {"code"},
+		"client_id":     {u.clientID},
+		"redirect_uri":  {redirect},
+		"state":         {u.pending.state},
+		"scope":         {authorizeScope},
+	}
+	return c.url("/ws/oauth/authorize") + "?" + strings.ReplaceAll(q.Encode(), "+", "%20"), nil
+}
+
+// Callback finishes a sign-in: checks state, exchanges code, saves the token.
+func (c *Client) Callback(ctx context.Context, state, code string) error {
+	if c.user == nil {
+		return errors.New("user context is not configured on this server")
+	}
+	u := c.user
+	u.mu.Lock()
+	defer u.mu.Unlock()
+	p := u.pending
+	if p == nil || subtle.ConstantTimeCompare([]byte(state), []byte(p.state)) != 1 {
+		return ErrBadState
+	}
+	u.pending = nil // single use, whatever happens next
+	if u.now().After(p.expires) {
+		return ErrBadState
+	}
+	t, err := c.tokenRequest(ctx, url.Values{
+		"grant_type":    {"authorization_code"},
+		"code":          {code},
+		"redirect_uri":  {p.redirect},
+		"client_id":     {u.clientID},
+		"client_secret": {u.clientSecret},
+	})
+	if err != nil {
+		var ae *APIError
+		if errors.As(err, &ae) && ae.Status/100 == 4 {
+			ae.Hint = "NinjaOne rejected the sign-in: check the Web app's redirect URI matches the server's and that it allows the Authorization code grant, then ask for a new link."
+		}
+		return err
+	}
+	_, err = u.accept(t, "")
+	return err
 }
 
 // DoUser is Do with the signed-in user's token instead of the app's.

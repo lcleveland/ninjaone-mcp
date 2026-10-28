@@ -55,6 +55,9 @@ type Config struct {
 	WebClientID     string
 	WebClientSecret string
 	UserTokenFile   string // the rotating refresh token, rewritten by the server
+	// Where NinjaOne sends the browser after sign-in: this server's
+	// /oauth/callback. Must match the Web app's redirect URI exactly.
+	OAuthRedirectURL string
 
 	LogLevel slog.Level
 
@@ -118,6 +121,7 @@ func Parse(args []string, getenv func(string) string) (*Config, []string, error)
 	fs.StringVar(&webIDFile, "web-client-id-file", getenv("NINJAONE_WEB_CLIENT_ID_FILE"), "file holding the Web app's client ID, for user context (env NINJAONE_WEB_CLIENT_ID_FILE)")
 	fs.StringVar(&webSecretFile, "web-client-secret-file", getenv("NINJAONE_WEB_CLIENT_SECRET_FILE"), "file holding the Web app's client secret, for user context (env NINJAONE_WEB_CLIENT_SECRET_FILE)")
 	fs.StringVar(&c.UserTokenFile, "user-token-file", getenv("NINJAONE_USER_TOKEN_FILE"), "file the server keeps the user's refresh token in (default $STATE_DIRECTORY/user-token.json) (env NINJAONE_USER_TOKEN_FILE)")
+	fs.StringVar(&c.OAuthRedirectURL, "oauth-redirect-url", getenv("NINJAONE_OAUTH_REDIRECT_URL"), "the Web app's redirect URI, this server's /oauth/callback (default http://<--addr>/oauth/callback) (env NINJAONE_OAUTH_REDIRECT_URL)")
 	fs.StringVar(&c.Scopes, "scopes", "", "space-separated OAuth scopes to request (default: all scopes on the app)")
 	fs.DurationVar(&c.RequestTimeout, "request-timeout", 30*time.Second, "per-request timeout to NinjaOne")
 	fs.StringVar(&logLevel, "log-level", or(getenv("NINJAONE_MCP_LOG_LEVEL"), "info"), "debug|info|warn|error (env NINJAONE_MCP_LOG_LEVEL)")
@@ -278,7 +282,7 @@ func (c *Config) userContext(idFile, secretFile, credDir, stateDir string) error
 	}
 	switch {
 	case c.WebClientID == "" && c.WebClientSecret == "":
-		c.UserTokenFile = ""
+		c.UserTokenFile, c.OAuthRedirectURL = "", ""
 		return nil
 	case c.WebClientID == "" || c.WebClientSecret == "":
 		return errors.New("user context needs both the Web app's client ID and secret (--web-client-id-file and --web-client-secret-file, or the systemd credentials web-client-id and web-client-secret)")
@@ -289,6 +293,21 @@ func (c *Config) userContext(idFile, secretFile, credDir, stateDir string) error
 	}
 	if c.UserTokenFile == "" {
 		return errors.New("user context needs somewhere to keep the refresh token: set --user-token-file, or run under systemd with StateDirectory")
+	}
+	if c.OAuthRedirectURL == "" {
+		host, port, err := net.SplitHostPort(c.Addr)
+		if err != nil {
+			return fmt.Errorf("--addr: %w", err)
+		}
+		// A wildcard listen address is not a place a browser can be sent.
+		if ip := net.ParseIP(host); host == "" || (ip != nil && ip.IsUnspecified()) {
+			host = "127.0.0.1"
+		}
+		c.OAuthRedirectURL = "http://" + net.JoinHostPort(host, port) + "/oauth/callback"
+	}
+	// The path becomes the callback's route on this server's listener.
+	if u, err := url.Parse(c.OAuthRedirectURL); err != nil || (u.Scheme != "http" && u.Scheme != "https") || u.Host == "" || len(u.Path) < 2 {
+		return fmt.Errorf("--oauth-redirect-url must be an http(s) URL with a path, e.g. http://127.0.0.1:8233/oauth/callback; got %q", c.OAuthRedirectURL)
 	}
 	return nil
 }

@@ -15,23 +15,40 @@ import (
 	"sync"
 	"sync/atomic"
 	"testing"
+	"time"
 )
 
-const webSecret = "w3b-client-secret"
+const (
+	webSecret    = "w3b-client-secret"
+	testRedirect = "http://127.0.0.1:8233/oauth/callback"
+)
 
 // userTenant adds a Web app's refresh_token grant to tenant. Each refresh
 // rotates the refresh token (rt1 -> rt2 -> ...) and issues user<n>.
 type userTenant struct {
 	tenant
 	refreshes atomic.Int32
-	reject    bool   // answer refreshes with 400 invalid_grant
-	rotate    bool   // include a new refresh_token in responses
-	current   string // the refresh token the tenant accepts
+	exchanges atomic.Int32 // authorization_code grants
+	reject    bool         // answer refreshes with 400 invalid_grant
+	rotate    bool         // include a new refresh_token in responses
+	current   string       // the refresh token the tenant accepts
 }
 
 func (f *userTenant) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 	if r.URL.Path == "/ws/oauth/token" {
 		r.ParseForm()
+		if g := r.PostForm.Get("grant_type"); g == "authorization_code" {
+			f.exchanges.Add(1)
+			if r.PostForm.Get("code") != "good-code" || r.PostForm.Get("redirect_uri") != testRedirect || r.PostForm.Get("client_secret") != webSecret {
+				w.WriteHeader(http.StatusBadRequest)
+				io.WriteString(w, `{"error":"invalid_grant"}`)
+				return
+			}
+			f.current = "rt-code"
+			w.Header().Set("Content-Type", "application/json")
+			io.WriteString(w, `{"access_token":"user-code","refresh_token":"rt-code","expires_in":3600}`)
+			return
+		}
 		if g := r.PostForm.Get("grant_type"); g == "refresh_token" {
 			if f.reject || r.PostForm.Get("client_secret") != webSecret || r.PostForm.Get("refresh_token") != f.current {
 				w.WriteHeader(http.StatusBadRequest)
@@ -176,5 +193,63 @@ func TestUserSecretsNeverInErrors(t *testing.T) {
 	_, err := c.DoUser(context.Background(), http.MethodPost, "/v2/x", nil, map[string]any{})
 	if err == nil || strings.Contains(err.Error(), webSecret) || strings.Contains(err.Error(), "user1") {
 		t.Errorf("leaked: %v", err)
+	}
+}
+
+func TestAuthorizeURLAndCallback(t *testing.T) {
+	f := &userTenant{rotate: true}
+	c, file := newUserTest(t, f)
+	os.Remove(file)
+	var bearer string
+	f.api = func(w http.ResponseWriter, r *http.Request) {
+		bearer = r.Header.Get("Authorization")
+		io.WriteString(w, `{}`)
+	}
+
+	raw, err := c.AuthorizeURL(testRedirect)
+	if err != nil {
+		t.Fatal(err)
+	}
+	u, _ := url.Parse(raw)
+	q := u.Query()
+	if u.Path != "/ws/oauth/authorize" || q.Get("response_type") != "code" || q.Get("client_id") != "web-id" ||
+		q.Get("redirect_uri") != testRedirect || !strings.Contains(q.Get("scope"), "offline_access") || q.Get("state") == "" {
+		t.Fatalf("authorize URL = %s", raw)
+	}
+	state := q.Get("state")
+
+	if err := c.Callback(context.Background(), "wrong", "good-code"); !errors.Is(err, ErrBadState) || f.exchanges.Load() != 0 {
+		t.Errorf("wrong state: err = %v, exchanges = %d", err, f.exchanges.Load())
+	}
+	if err := c.Callback(context.Background(), state, "good-code"); err != nil {
+		t.Fatal(err)
+	}
+	if storedRefresh(t, file) != "rt-code" || !c.UserState().Authorized {
+		t.Errorf("after callback: stored %q, state %+v", storedRefresh(t, file), c.UserState())
+	}
+	if err := c.Callback(context.Background(), state, "good-code"); !errors.Is(err, ErrBadState) || f.exchanges.Load() != 1 {
+		t.Errorf("reused state: err = %v, exchanges = %d", err, f.exchanges.Load())
+	}
+	c.DoUser(context.Background(), http.MethodPost, "/v2/x", nil, map[string]any{})
+	if bearer != "Bearer user-code" {
+		t.Errorf("bearer after sign-in = %q", bearer)
+	}
+}
+
+func TestCallbackStateExpiresAndIsReplaced(t *testing.T) {
+	f := &userTenant{}
+	c, _ := newUserTest(t, f)
+	now := time.Now()
+	c.user.now = func() time.Time { return now }
+
+	first, _ := c.AuthorizeURL(testRedirect)
+	second, _ := c.AuthorizeURL(testRedirect)
+	state := func(raw string) string { u, _ := url.Parse(raw); return u.Query().Get("state") }
+	if err := c.Callback(context.Background(), state(first), "good-code"); !errors.Is(err, ErrBadState) {
+		t.Errorf("replaced state accepted: %v", err)
+	}
+	now = now.Add(11 * time.Minute)
+	if err := c.Callback(context.Background(), state(second), "good-code"); !errors.Is(err, ErrBadState) || f.exchanges.Load() != 0 {
+		t.Errorf("expired state: err = %v, exchanges = %d", err, f.exchanges.Load())
 	}
 }
