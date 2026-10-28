@@ -31,7 +31,7 @@ stdenvNoCC.mkDerivation {
   '';
 
   meta = {
-    description = "NinjaOne REST helper: run library scripts as a signed-in user, per-device analysis";
+    description = "NinjaOne REST helper: run library scripts as a signed-in user";
     homepage = "https://github.com/lcleveland/ninjaone-mcp";
     license = lib.licenses.mit;
     platforms = lib.platforms.linux;

@@ -91,16 +91,13 @@ There is no flag that takes the secret directly.
 
 ## nj: running scripts as a user
 
-`script/run` needs a signed-in user, so an API Services client cannot make it (`403 user_context_required`). `nj` (`tools/nj.py`, one stdlib-only Python file, no dependencies) runs library scripts with a user's token instead. The run is audited as that user. The same file has read helpers (`analyze`, `grep`, `find`, `get`, `scripts`, `move`) that call the REST API directly.
+`script/run` needs a signed-in user, so an API Services client cannot make it (`403 user_context_required`). `nj` (`tools/nj.py`, one stdlib-only Python file, no dependencies) runs library scripts with a user's token instead. The run is audited as that user. For everything else (device details, fleet reads, moving devices), use the server's own tools.
 
 ```
 nj auth                                      once: browser consent, stores a refresh token
 nj scripts                                   library scripts: id, name, language
 nj run PC-0001 <scriptId> [params]           dry run, prints the request
 nj run PC-0001 <scriptId> [params] --apply   dispatch as SYSTEM
-nj analyze PC-0001                           one-page device report
-nj grep PC-0001 bluetooth [days]             rows from every dataset matching a regex
-nj find 0001 | nj get /v2/queries/disks | nj move PC-0001 <locationId> [--apply]
 nj selftest                                  offline check, touches no tenant
 ```
 
@@ -117,11 +114,11 @@ Or without installing: `nix run github:lcleveland/ninjaone-mcp#nj -- scripts`. W
 
 ### Set up
 
-`nj` uses two NinjaOne apps. The API Services app reads (device lookup, `scripts`, `analyze` and the rest, `run` included). The Web app only dispatches `run`, as the signed-in user.
+`nj` uses two NinjaOne apps. The API Services app reads (`scripts`, and the device lookup in `run`). The Web app only dispatches `run`, as the signed-in user.
 
 1. **API Services app.** Create it as in [Getting an API client](#getting-an-api-client). `monitoring` is enough for `nj`. If you already run this server, reuse its client.
 2. **Web app.** In **Administration → Apps → API → Client App IDs → Add**, pick the **Web** platform, the one that has a client secret and a Redirect URI (not API Services, not a native or single-page platform). Set:
-   - Redirect URI `http://localhost:8765/callback`
+   - Redirect URI `http://127.0.0.1:8765/callback`
    - Scopes **Monitoring**, **Management** and **Control**
    - Allowed grant types **Authorization code** and **Refresh token**
 
@@ -135,15 +132,15 @@ Or without installing: `nix run github:lcleveland/ninjaone-mcp#nj -- scripts`. W
    printf 'NINJAONE_WEB_CLIENT_ID=<web id>\nNINJAONE_WEB_CLIENT_SECRET=<web secret>\n' > "$d/webapp.env"
    chmod 400 "$d/client-secret" "$d/webapp.env"
    ```
-   `NINJAONE_REGION` takes the same values as the server (`app`, `us`, `us2`, `eu`, `ca`, `oc`, `fed`), or set `NINJAONE_BASE_URL`. Use the region: a vanity admin domain may load the console but is not reliable for the OAuth token endpoint. The secret can instead be `NINJAONE_CLIENT_SECRET_FILE=<path>` in `env`, which is what the server uses. `NINJAONE_SCOPES` defaults to `monitoring`.
+   `NINJAONE_REGION` takes the same values as the server (`app`, `us`, `us2`, `eu`, `ca`, `oc`, `fed`), or set `NINJAONE_BASE_URL`. Use the region: a vanity admin domain may load the console but is not reliable for the OAuth token endpoint. The secret can instead be `NINJAONE_CLIENT_SECRET_FILE=<path>` in `env`, which is what the server uses. `NINJAONE_SCOPES` (nj only; the server has `--scopes`) defaults to `monitoring`. Set the region or the base URL, not both. The base URL must be https unless the host is loopback, as with the server.
 4. **Consent.** `nj auth` prints a URL and listens on `127.0.0.1:8765` for the redirect, so open the URL in a browser on the same machine (over SSH, forward that port). Sign in as the user who should own the runs and click Authorize. It prints `saved .../user-tokens.json`.
 5. **Check.** `nj scripts` lists the library, and `nj run PC-0001 <scriptId>` prints the request without sending it.
 
-Any key can also come from the environment, which wins over the files. The `NINJAONE_*` names match the server's, so one environment can serve both.
+Any key can also come from the environment, which wins over the files. The `NINJAONE_*` names match the server's environment variables, so one environment can serve both.
 
 ### Running and reading results
 
-`run` is a dry run unless you pass `--apply`. The script runs as SYSTEM. A dispatch is queued to the agent and not confirmed, and an offline device holds it until the agent checks in. Read the outcome from the device's activities. With this server that is `ninjaone_activity`; the script output is at `data.message.params.output` in each activity. `nj get /v2/device/<id>/activities` also works but can be very slow.
+`run` is a dry run unless you pass `--apply`. The script runs as SYSTEM. A dispatch is queued to the agent and not confirmed, and an offline device holds it until the agent checks in. Read the outcome from the device's activities. With this server that is `ninjaone_activity`; the script output is at `data.message.params.output` in each activity.
 
 ### Notes
 
