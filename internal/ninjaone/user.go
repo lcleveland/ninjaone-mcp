@@ -44,9 +44,16 @@ type pending struct {
 	expires         time.Time
 }
 
-// ErrBadState is a callback whose state is not the pending one: wrong,
-// already used, replaced by a newer link, or expired.
-var ErrBadState = errors.New("this sign-in link is stale or was already used: ask for a new one (ninjaone_status action authorize)")
+var (
+	// ErrBadState is a callback whose state is not the pending one: wrong,
+	// already used, replaced by a newer link, or expired.
+	ErrBadState = errors.New("this sign-in link is stale or was already used: ask for a new one (ninjaone_status action authorize)")
+	// ErrDenied is a valid callback without a code: the user declined, or
+	// NinjaOne sent an error.
+	ErrDenied = errors.New("NinjaOne did not authorize the sign-in")
+
+	errNoUserContext = errors.New("user context is not configured on this server")
+)
 
 // authorizeScope is what the user token may do; offline_access gets the refresh token.
 const authorizeScope = "monitoring management control offline_access"
@@ -61,7 +68,7 @@ func (c *Client) EnableUserContext(clientID, clientSecret, file string) {
 // that sends the browser back to redirect with a single-use state.
 func (c *Client) AuthorizeURL(redirect string) (string, error) {
 	if c.user == nil {
-		return "", errors.New("user context is not configured on this server")
+		return "", errNoUserContext
 	}
 	u := c.user
 	u.mu.Lock()
@@ -77,10 +84,12 @@ func (c *Client) AuthorizeURL(redirect string) (string, error) {
 	return c.url("/ws/oauth/authorize") + "?" + strings.ReplaceAll(q.Encode(), "+", "%20"), nil
 }
 
-// Callback finishes a sign-in: checks state, exchanges code, saves the token.
-func (c *Client) Callback(ctx context.Context, state, code string) error {
+// Callback finishes a sign-in from the redirect's state, code and error
+// parameters: the state is checked first, so nothing else is trusted until
+// it matches; then the code is exchanged and the token saved.
+func (c *Client) Callback(ctx context.Context, state, code, denied string) error {
 	if c.user == nil {
-		return errors.New("user context is not configured on this server")
+		return errNoUserContext
 	}
 	u := c.user
 	u.mu.Lock()
@@ -92,6 +101,9 @@ func (c *Client) Callback(ctx context.Context, state, code string) error {
 	u.pending = nil // single use, whatever happens next
 	if u.now().After(p.expires) {
 		return ErrBadState
+	}
+	if denied != "" || code == "" {
+		return fmt.Errorf("%w: %.100q", ErrDenied, cmp.Or(denied, "no authorization code"))
 	}
 	t, err := c.tokenRequest(ctx, url.Values{
 		"grant_type":    {"authorization_code"},
@@ -114,7 +126,7 @@ func (c *Client) Callback(ctx context.Context, state, code string) error {
 // DoUser is Do with the signed-in user's token instead of the app's.
 func (c *Client) DoUser(ctx context.Context, method, path string, q url.Values, body any) (*Response, error) {
 	if c.user == nil {
-		return nil, errors.New("user context is not configured on this server")
+		return nil, errNoUserContext
 	}
 	return c.do(ctx, c.userBearer, method, path, q, body)
 }

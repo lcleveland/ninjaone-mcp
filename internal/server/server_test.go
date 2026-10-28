@@ -142,6 +142,9 @@ func TestOAuthCallback(t *testing.T) {
 	if code, _ := get("code=the-code&state=wrong"); code != http.StatusBadRequest || exchanges != 0 {
 		t.Errorf("wrong state: %d, exchanges %d", code, exchanges)
 	}
+	if code, body := get("error=injected-text&state=wrong"); code != http.StatusBadRequest || strings.Contains(body, "injected-text") {
+		t.Errorf("error with a wrong state was echoed: %d %s", code, body)
+	}
 	if code, body := get("error=access_denied&state=" + state); code != http.StatusBadRequest || !strings.Contains(body, "access_denied") {
 		t.Errorf("denied: %d %s", code, body)
 	}

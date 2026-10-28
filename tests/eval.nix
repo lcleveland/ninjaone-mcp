@@ -157,6 +157,7 @@ in
       };
       on = evalModule (base web);
       off = evalModule (base { });
+      static = evalModule (base (web // { user = "ninjaone-mcp"; }));
       sc = on.systemd.services.ninjaone-mcp.serviceConfig;
     in
     assert

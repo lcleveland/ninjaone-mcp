@@ -2,6 +2,7 @@ package tools
 
 import (
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 
@@ -84,6 +85,31 @@ func TestUserContextNotAuthorizedSendsNothing(t *testing.T) {
 	for _, s := range seen {
 		if strings.HasPrefix(s, "POST") {
 			t.Errorf("sent %s without an authorized user", s)
+		}
+	}
+}
+
+func TestUserContextOffKeepsTheAppToken(t *testing.T) {
+	var seen []string
+	cs := session(t, allow("scripts"), bearers(&seen))
+	if _, isErr, text := call(t, cs, "ninjaone_script", map[string]any{"action": "run", "id": 5, "reason": "x", "confirm": "FS01", "body": map[string]any{"type": "SCRIPT", "id": 171}}); isErr {
+		t.Fatal(text)
+	}
+	if !slices.Contains(seen, "POST /v2/device/5/script/run Bearer tok") {
+		t.Errorf("script run without user context: %v", seen)
+	}
+}
+
+func TestUserContextConfirmMismatchSendsNothing(t *testing.T) {
+	var seen []string
+	cs := session(t, userAllow(t, true, "scripts"), bearers(&seen))
+	_, isErr, text := call(t, cs, "ninjaone_script", map[string]any{"action": "run", "id": 5, "reason": "x", "confirm": "NOT-FS01", "body": map[string]any{"type": "SCRIPT", "id": 171}})
+	if !isErr || !strings.Contains(text, "confirm") {
+		t.Errorf("err=%v %s", isErr, text)
+	}
+	for _, s := range seen {
+		if strings.HasPrefix(s, "POST") {
+			t.Errorf("sent %s despite a confirm mismatch", s)
 		}
 	}
 }

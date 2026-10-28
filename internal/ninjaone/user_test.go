@@ -218,16 +218,16 @@ func TestAuthorizeURLAndCallback(t *testing.T) {
 	}
 	state := q.Get("state")
 
-	if err := c.Callback(context.Background(), "wrong", "good-code"); !errors.Is(err, ErrBadState) || f.exchanges.Load() != 0 {
+	if err := c.Callback(context.Background(), "wrong", "good-code", ""); !errors.Is(err, ErrBadState) || f.exchanges.Load() != 0 {
 		t.Errorf("wrong state: err = %v, exchanges = %d", err, f.exchanges.Load())
 	}
-	if err := c.Callback(context.Background(), state, "good-code"); err != nil {
+	if err := c.Callback(context.Background(), state, "good-code", ""); err != nil {
 		t.Fatal(err)
 	}
 	if storedRefresh(t, file) != "rt-code" || !c.UserState().Authorized {
 		t.Errorf("after callback: stored %q, state %+v", storedRefresh(t, file), c.UserState())
 	}
-	if err := c.Callback(context.Background(), state, "good-code"); !errors.Is(err, ErrBadState) || f.exchanges.Load() != 1 {
+	if err := c.Callback(context.Background(), state, "good-code", ""); !errors.Is(err, ErrBadState) || f.exchanges.Load() != 1 {
 		t.Errorf("reused state: err = %v, exchanges = %d", err, f.exchanges.Load())
 	}
 	c.DoUser(context.Background(), http.MethodPost, "/v2/x", nil, map[string]any{})
@@ -245,11 +245,36 @@ func TestCallbackStateExpiresAndIsReplaced(t *testing.T) {
 	first, _ := c.AuthorizeURL(testRedirect)
 	second, _ := c.AuthorizeURL(testRedirect)
 	state := func(raw string) string { u, _ := url.Parse(raw); return u.Query().Get("state") }
-	if err := c.Callback(context.Background(), state(first), "good-code"); !errors.Is(err, ErrBadState) {
+	if err := c.Callback(context.Background(), state(first), "good-code", ""); !errors.Is(err, ErrBadState) {
 		t.Errorf("replaced state accepted: %v", err)
 	}
 	now = now.Add(11 * time.Minute)
-	if err := c.Callback(context.Background(), state(second), "good-code"); !errors.Is(err, ErrBadState) || f.exchanges.Load() != 0 {
+	if err := c.Callback(context.Background(), state(second), "good-code", ""); !errors.Is(err, ErrBadState) || f.exchanges.Load() != 0 {
 		t.Errorf("expired state: err = %v, exchanges = %d", err, f.exchanges.Load())
+	}
+}
+
+func TestCallbackChecksStateBeforeErrorOrCode(t *testing.T) {
+	f := &userTenant{}
+	c, _ := newUserTest(t, f)
+	state := func() string {
+		raw, _ := c.AuthorizeURL(testRedirect)
+		u, _ := url.Parse(raw)
+		return u.Query().Get("state")
+	}
+
+	// An error from a stranger is not echoed: the state gate comes first.
+	if err := c.Callback(context.Background(), "wrong", "", "access_denied"); !errors.Is(err, ErrBadState) {
+		t.Errorf("error with wrong state: %v", err)
+	}
+	s := state()
+	if err := c.Callback(context.Background(), s, "", "access_denied"); !errors.Is(err, ErrDenied) || !strings.Contains(err.Error(), "access_denied") {
+		t.Errorf("denied: %v", err)
+	}
+	if err := c.Callback(context.Background(), s, "good-code", ""); !errors.Is(err, ErrBadState) {
+		t.Errorf("state reusable after a denial: %v", err)
+	}
+	if err := c.Callback(context.Background(), state(), "", ""); !errors.Is(err, ErrDenied) || f.exchanges.Load() != 0 {
+		t.Errorf("empty code: err = %v, exchanges = %d", err, f.exchanges.Load())
 	}
 }

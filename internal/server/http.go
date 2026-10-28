@@ -4,7 +4,6 @@ import (
 	"context"
 	"crypto/subtle"
 	"errors"
-	"fmt"
 	"io"
 	"log/slog"
 	"net"
@@ -63,16 +62,14 @@ func callback(c *ninjaone.Client, log *slog.Logger) http.Handler {
 		w.Header().Set("Content-Type", "text/plain; charset=utf-8")
 		w.Header().Set("Cache-Control", "no-store")
 		q := r.URL.Query()
-		if e := q.Get("error"); e != "" {
-			w.WriteHeader(http.StatusBadRequest)
-			fmt.Fprintf(w, "NinjaOne did not authorize: %.100q. Ask for a new link to try again.\n", e)
-			return
-		}
-		err := c.Callback(r.Context(), q.Get("state"), q.Get("code"))
+		err := c.Callback(r.Context(), q.Get("state"), q.Get("code"), q.Get("error"))
 		switch {
 		case errors.Is(err, ninjaone.ErrBadState):
 			w.WriteHeader(http.StatusBadRequest)
 			io.WriteString(w, "This sign-in link is stale or was already used. Ask for a new one.\n")
+		case errors.Is(err, ninjaone.ErrDenied):
+			w.WriteHeader(http.StatusBadRequest)
+			io.WriteString(w, err.Error()+". Ask for a new link to try again.\n")
 		case err != nil:
 			log.Warn("user sign-in failed", "error", err.Error())
 			w.WriteHeader(http.StatusBadGateway)
