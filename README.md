@@ -37,7 +37,7 @@ All are off by default. A disabled capability's actions are removed from the too
 | `--allow-scripts` | `script/run`: scripts and built-in actions, often as SYSTEM; needs [user context](#user-context-running-scripts-and-ticket-writes) |
 | `--allow-device-admin` | device edit/move, owner, approve/reject, decommission, organization and location create/edit, ITAM, licenses |
 
-**Never exposed**, whatever the flags: custom-field definitions and global values, policies and policy mappings, node roles, tabs, users/roles/contacts, webhooks, installer generation, organization archive, billing and vulnerability imports.
+**Never exposed**, whatever the flags: custom-field definitions and global values, policies and policy mappings, node roles, tabs, users/roles/contacts, webhooks, installer generation and installer download links (even over GET), organization archive, billing and vulnerability imports.
 
 Why capabilities rather than create/update/delete flags: every NinjaOne write needs the same `management` OAuth scope, so neither HTTP verbs nor scopes tell a ticket comment apart from running code as SYSTEM. See [ADR 0001](docs/adr/0001-capability-flags-not-verb-flags.md).
 

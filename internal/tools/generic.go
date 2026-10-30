@@ -96,6 +96,10 @@ var neverPrefixes = []string{
 	"/v2/policies", "/v2/system/custom-fields", "/v2/tab", "/v2/user/", "/v2/vulnerability/", "/v2/webhook",
 }
 
+// neverReads are GETs that act like writes: an installer URL enrolls new
+// devices into the tenant.
+var neverReads = []string{"/v2/organization/{id}/location/{locationId}/installer"}
+
 // routes builds the full table: first-class actions first (they carry
 // confirm and dispatch), then the generic-only writes.
 func routes() []route {
@@ -218,6 +222,10 @@ func (d Deps) generic(ctx context.Context, rs []route, in APIInput) (any, error)
 	if method == http.MethodGet {
 		if in.Body != nil {
 			return nil, errors.New("GET takes no body")
+		}
+		// Lowercased so a case variant cannot slip past the block list.
+		if slices.ContainsFunc(neverReads, func(p string) bool { return prefixMatch(p, strings.ToLower(path)) }) {
+			return nil, fmt.Errorf("%s %s is tenant administration, which this server never exposes; do it in the NinjaOne console", method, path)
 		}
 		return d.raw(ctx, method, path, q, nil)
 	}

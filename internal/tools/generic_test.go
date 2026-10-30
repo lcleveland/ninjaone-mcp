@@ -54,8 +54,14 @@ func TestGenericNeverExposedEvenWithEverything(t *testing.T) {
 		{"PUT", "/v2/webhook"}, {"POST", "/v2/organization/generate-installer"}, {"POST", "/v2/user/technicians"},
 		{"PATCH", "/v2/user/role/3/add-members"}, {"PUT", "/v2/organization/4/policies"}, {"POST", "/v2/billing/invoices/approve"},
 		{"DELETE", "/v2/custom-fields/bulk"}, {"PATCH", "/v2/system/custom-fields"}, {"POST", "/v2/contacts"},
+		{"GET", "/v2/organization/1/location/2/installer/WINDOWS_MSI"}, {"GET", "/v2/organization/1/location/2/installer/"},
+		{"GET", "/v2/organization/1/location/2/Installer/MAC_PKG"}, {"GET", "/v2/organization/1/location/2/installers"},
 	} {
-		_, isErr, text := call(t, cs, "ninjaone_api", map[string]any{"method": c[0], "path": c[1], "reason": "x", "body": map[string]any{}})
+		var body any = map[string]any{}
+		if c[0] == "GET" {
+			body = nil
+		}
+		_, isErr, text := call(t, cs, "ninjaone_api", map[string]any{"method": c[0], "path": c[1], "reason": "x", "body": body})
 		if !isErr || !strings.Contains(text, "never exposes") {
 			t.Errorf("%s %s: %v %s", c[0], c[1], isErr, text)
 		}
