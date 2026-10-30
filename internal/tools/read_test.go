@@ -90,13 +90,47 @@ func TestUnpagedListIsCut(t *testing.T) {
 	cs := session(t, nil, func(w http.ResponseWriter, r *http.Request) {
 		jsonOK(w, devices(1, 30))
 	})
-	out, _, _ := call(t, cs, "ninjaone_lookup", map[string]any{"action": "policies", "limit": 10})
-	tr, _ := out["_truncation"].(map[string]any)
-	if len(out["results"].([]any)) != 10 || tr == nil || tr["of"] != 30.0 || out["next_cursor"] != nil {
-		t.Errorf("out = %v", out)
+	args := map[string]any{"action": "policies", "limit": 10}
+	var seen []any
+	for range 3 {
+		out, isErr, text := call(t, cs, "ninjaone_lookup", args)
+		if isErr {
+			t.Fatal(text)
+		}
+		seen = append(seen, out["results"].([]any)...)
+		args["cursor"] = out["next_cursor"]
+		if tr, _ := out["_truncation"].(map[string]any); args["cursor"] != nil && (tr["of"] != 30.0 || !strings.Contains(tr["note"].(string), "limit")) {
+			t.Errorf("truncation = %v", tr)
+		}
 	}
-	if !strings.Contains(tr["note"].(string), "not paged") {
-		t.Errorf("note = %v", tr["note"])
+	if len(seen) != 30 || args["cursor"] != nil || seen[29].(map[string]any)["id"] != 30.0 {
+		t.Errorf("walked %d items, last cursor %v", len(seen), args["cursor"])
+	}
+}
+
+func TestUnpagedSizeCutBlamesSize(t *testing.T) {
+	big := strings.Repeat("x", 2000)
+	cs := session(t, nil, func(w http.ResponseWriter, r *http.Request) {
+		var items []string
+		for i := 1; i <= 290; i++ {
+			items = append(items, fmt.Sprintf(`{"name":"s%d","displayName":"S","state":"RUNNING","startType":"AUTO","description":"%s"}`, i, big))
+		}
+		jsonOK(w, "["+strings.Join(items, ",")+"]")
+	})
+	// Brief drops description, so all 200 fit.
+	out, _, _ := call(t, cs, "ninjaone_device_detail", map[string]any{"action": "windows_services", "id": 1, "limit": 200})
+	if res := out["results"].([]any); len(res) != 200 || res[0].(map[string]any)["description"] != nil {
+		t.Errorf("brief: %d items, %v", len(res), res[0])
+	}
+	out, _, _ = call(t, cs, "ninjaone_device_detail", map[string]any{"action": "windows_services", "id": 1, "limit": 200, "fields": "name,description"})
+	tr, _ := out["_truncation"].(map[string]any)
+	n := len(out["results"].([]any))
+	if n >= 200 || tr == nil || !strings.Contains(tr["note"].(string), "size") {
+		t.Fatalf("%d items, truncation %v", n, tr)
+	}
+	pos, err := decodeCursor("ninjaone_device_detail.windows_services", out["next_cursor"].(string))
+	if err != nil || pos != fmt.Sprint(n) {
+		t.Errorf("cursor %q, want offset %d", pos, n)
 	}
 }
 

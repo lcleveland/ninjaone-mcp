@@ -116,6 +116,7 @@ func (d Deps) list(ctx context.Context, key string, v View, path string, q url.V
 	}
 
 	var body any
+	off := 0 // NoPaging: the cursor is an offset into the full list
 	switch v.Paging {
 	case After, PageInfo:
 		q.Set("pageSize", strconv.Itoa(limit))
@@ -155,10 +156,12 @@ func (d Deps) list(ctx context.Context, key string, v View, path string, q url.V
 		body = m
 	case NoPaging:
 		if pos != "" {
-			return nil, errors.New("this list is not paged; there is no next page")
+			if off, err = strconv.Atoi(pos); err != nil || off < 0 {
+				return nil, errors.New("bad cursor; pass next_cursor from the previous call unchanged")
+			}
 		}
 		if v.LimitParam != "" {
-			q.Set(v.LimitParam, strconv.Itoa(limit))
+			q.Set(v.LimitParam, strconv.Itoa(off+limit))
 		}
 	}
 
@@ -173,11 +176,12 @@ func (d Deps) list(ctx context.Context, key string, v View, path string, q url.V
 
 	items, next := page(v, raw)
 	of := len(items)
+	// shortcut: unpaged lists are re-fetched per call, so the offset can shift if the list changes between calls; fine for inventory-style lists.
+	items = items[min(off, len(items)):]
 	if len(items) < limit {
 		next = "" // a short page is the last page
 	}
-	unpagedCut := v.Paging == NoPaging && len(items) > limit
-	if unpagedCut {
+	if v.Paging == NoPaging && len(items) > limit {
 		items = items[:limit] // unpaged endpoints return everything; cut here
 	}
 
@@ -194,18 +198,23 @@ func (d Deps) list(ctx context.Context, key string, v View, path string, q url.V
 	}
 
 	out := map[string]any{}
+	sizeCut := false
 	for len(items) > 1 && size(items) > maxBytes {
-		items = items[:len(items)/2]
+		items, sizeCut = items[:len(items)/2], true
 	}
-	if len(items) < of {
+	if off+len(items) < of {
 		trunc := map[string]any{
 			"returned": len(items),
 			"of":       of,
 			"note":     "result too large; narrow the device filter (df) or query, pass fields, or lower limit",
 		}
 		switch {
-		case unpagedCut:
-			trunc["note"] = "this list is not paged and was cut at limit; narrow the device filter (df) or query to see the rest"
+		case v.Paging == NoPaging:
+			next = strconv.Itoa(off + len(items))
+			trunc["note"] = "cut at limit; pass next_cursor for the rest"
+			if sizeCut {
+				trunc["note"] = "cut for size, not limit; pass next_cursor for the rest, or fields to fit more per call"
+			}
 		case (v.Paging == After || v.Paging == Anchor) && len(items) > 0:
 			// Id-anchored: the next page resumes right after the last item kept.
 			next = idOf(items[len(items)-1])
