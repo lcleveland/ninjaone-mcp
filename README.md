@@ -102,7 +102,7 @@ NinjaOne accepts `script/run` only from a signed-in user, and answers an API Ser
    - Allowed grant types **Authorization code** and **Refresh token**
 
    Choose the platform and grant types on the Add form: the Edit view hides the platform and shows only Refresh token, so a mistake is hard to see later. Save, then copy the client ID and secret.
-2. **Store its ID and secret** next to the API Services ones:
+2. **Store its ID and secret** next to the API Services ones, on every machine that runs the server, before the rebuild that turns this on (systemd won't start the service while a credential file is missing):
    ```sh
    printf %s '<web client id>' | sudo install -m 0400 /dev/stdin /persist/secrets/ninjaone-web-client-id
    printf %s '<web client secret>' | sudo install -m 0400 /dev/stdin /persist/secrets/ninjaone-web-client-secret
@@ -118,14 +118,14 @@ NinjaOne accepts `script/run` only from a signed-in user, and answers an API Ser
    environment.persistence."/persist".directories = config.services.ninjaone-mcp.persistedPaths;
    ```
    The module loads both with `LoadCredential` and gives the service a `StateDirectory` for the token. Without the module: `--web-client-id-file`, `--web-client-secret-file`, and `--user-token-file` unless systemd sets `STATE_DIRECTORY`. User context needs `--http`.
-4. **Rebuild, then sign in once.** Ask the model to authorize NinjaOne, or call `ninjaone_status` with `action: authorize`. Open the link it returns in a browser on the server's machine (over SSH, forward port 8233), sign in as the user who should own the runs, and click Authorize. The page says "Authorized", and `ninjaone_status` then shows `user_context.authorized: true`.
-5. **Check.** Run a harmless, read-only library script on an online device, then read its output from `ninjaone_activity` (`data.message.params.output`).
+4. **Rebuild, then sign in once.** Ask the model to authorize NinjaOne, or call `ninjaone_status` with `action: authorize`. Open the link it returns in a browser on the server's machine (over SSH, forward port 8233), sign in as the user who should own the runs, and click Authorize. The page says "Authorized", and `ninjaone_status` then shows `user_context.authorized: true`. Each machine signs in once on its own.
+5. **Check.** Run a harmless, read-only library script on an online device, then read its output from `ninjaone_activity` (`data.message.params.output`). The run's `START_REQUESTED` activity names the signed-in user (`appUserName`). Reboot and run it again without signing in to confirm the token persisted.
 
 Notes:
 - The link works once, for 10 minutes; asking for a new one cancels the old.
 - The refresh token rotates on every use and is rewritten in the state directory (`/var/lib/private/ninjaone-mcp/user-token.json`, mode 0600). NinjaOne documents no fixed lifetime for it. One server per token: two servers sharing it would sign each other out.
 - To revoke, use NinjaOne's Refresh Token Dashboard or delete the Web app, then authorize again. A rejected token makes those writes fail with a hint to re-authorize; nothing falls back to the app token.
-- If NinjaOne refuses the IP-literal redirect URI, register `http://localhost:8233/oauth/callback` instead and set `oauthRedirectUrl` (`--oauth-redirect-url`) to match.
+- NinjaOne accepted the IP-literal redirect URI when checked (2026-10-30). If it ever refuses it, register `http://localhost:8233/oauth/callback` instead and set `oauthRedirectUrl` (`--oauth-redirect-url`) to match.
 - Ticket writes are routed the same way on other projects' reports; this tenant does not use NinjaOne ticketing, so that is untested here.
 
 ## Nix
