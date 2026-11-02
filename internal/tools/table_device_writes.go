@@ -57,7 +57,7 @@ var deviceAdminViews = []View{
 	{Action: "reject", Help: "reject pending devices; body {devices: [id, ...]}.", Method: "POST",
 		Path: "/v2/devices/approval/REJECT", Capability: "device-admin", Body: true, Require: []string{"devices"}, Destructive: true},
 	{Action: "decommission", Help: "stop managing device id; undoing it means reinstalling the agent. confirm must be the device's display name.", Method: "POST",
-		Path: "/v2/device/{id}/decommission", Capability: "device-admin", Confirm: true, Destructive: true},
+		Path: "/v2/device/{id}/decommission", Capability: "device-admin", Confirm: true, Destructive: true, User: true},
 }
 
 var orgAdminViews = []View{
